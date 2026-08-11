@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "authshield"
+version = "0.1.0"
+description = "Web Authentication Security Auditor - Automatically checks web apps for auth, session, CORS and JWT misconfigurations"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Aditya", email = "aditya@example.com"}
+]
+keywords = ["security", "authentication", "audit", "vulnerability", "penetration-testing"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+  "Topic :: Security :: Cryptography",
+]
+dependencies = [
+  "requests>=2.31.0",
+  "pyjwt>=2.8.0",
+  "beautifulsoup4>=4.12.0",
+  "click>=8.1.0",
+  "rich>=13.0.0",
+  "pydantic>=2.0.0",
+  "jinja2>=3.1.0",
+  "urllib3>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "black>=23.0.0",
+  "ruff>=0.1.0",
+  "mypy>=1.0.0",
+]
+
+[project.scripts]
+authshield = "authshield.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["authshield*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true

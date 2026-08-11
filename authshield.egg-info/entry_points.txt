@@ -1,0 +1,2 @@
+[console_scripts]
+authshield = authshield.cli:cli

@@ -1,0 +1,211 @@
+Metadata-Version: 2.4
+Name: authshield
+Version: 0.1.0
+Summary: Web Authentication Security Auditor - Automatically checks web apps for auth, session, CORS and JWT misconfigurations
+Author-email: Aditya <aditya@example.com>
+License: MIT
+Keywords: security,authentication,audit,vulnerability,penetration-testing
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Security
+Classifier: Topic :: Security :: Cryptography
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pyjwt>=2.8.0
+Requires-Dist: beautifulsoup4>=4.12.0
+Requires-Dist: click>=8.1.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: jinja2>=3.1.0
+Requires-Dist: urllib3>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+Dynamic: license-file
+
+# AuthShield - Web Authentication Security Auditor
+
+A Python-based security auditing tool that automatically detects authentication, session, CORS and JWT misconfigurations in web applications and generates evidence-based vulnerability reports with remediation guidance.
+
+## Features
+
+🔐 **Weak Authentication Detection** - Identifies weak password policies, missing MFA, default credentials  
+🚫 **Rate Limiting Checks** - Detects missing or weak rate limiting on auth endpoints  
+👤 **User Enumeration** - Finds username enumeration via timing attacks, error messages, response differences  
+🍪 **Session Cookie Security** - Checks for missing Secure, HttpOnly, SameSite flags  
+🌐 **CORS & Security Headers** - Validates CORS configuration and security headers (CSP, HSTS, X-Frame-Options, etc.)  
+🔑 **JWT Misconfigurations** - Detects algorithm confusion, weak secrets, missing expiration, none algorithm  
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+Or install from PyPI (when published):
+```bash
+pip install authshield
+```
+
+## Usage
+
+### Basic Scan
+```bash
+authshield scan https://example.com
+```
+
+### With Options
+```bash
+# Scan specific endpoints
+authshield scan https://example.com --endpoints /login,/register,/api/auth
+
+# Output format
+authshield scan https://example.com --format json --output report.json
+authshield scan https://example.com --format html --output report.html
+
+# Authenticated scan
+authshield scan https://example.com --cookie "session=abc123" --header "Authorization: Bearer token"
+
+# Verbose output
+authshield scan https://example.com -v
+```
+
+### List Available Checks
+```bash
+authshield checks
+```
+
+## Output Formats
+
+### JSON Report
+```json
+{
+  "target": "https://example.com",
+  "scan_time": "2024-01-15T10:30:00Z",
+  "findings": [
+    {
+      "id": "AUTH-001",
+      "title": "Weak Password Policy",
+      "severity": "HIGH",
+      "category": "authentication",
+      "evidence": "Password policy accepts 4-character passwords",
+      "fix": "Enforce minimum 12-character passwords with complexity requirements",
+      "references": ["https://owasp.org/www-project-authentication-cheat-sheet/"]
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 2,
+    "medium": 3,
+    "low": 1,
+    "info": 0
+  }
+}
+```
+
+### HTML Report
+Generates a professional, interactive HTML report with findings grouped by severity, evidence details, and remediation guidance.
+
+## Project Structure
+
+```
+authshield/
+├── authshield/
+│   ├── __init__.py
+│   ├── cli.py              # CLI entry point
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── scanner.py      # Main scanner orchestration
+│   │   ├── http_client.py  # HTTP client with retry/logic
+│   │   └── models.py       # Pydantic models for findings
+│   ├── checks/
+│   │   ├── __init__.py
+│   │   ├── auth.py         # Authentication checks
+│   │   ├── rate_limit.py   # Rate limiting checks
+│   │   ├── enum.py         # User enumeration checks
+│   │   ├── cookies.py      # Session cookie checks
+│   │   ├── cors.py         # CORS & security headers
+│   │   └── jwt.py          # JWT misconfiguration checks
+│   └── reporting/
+│       ├── __init__.py
+│       ├── json_report.py  # JSON report generator
+│       └── html_report.py  # HTML report generator
+├── templates/
+│   └── report.html.j2      # Jinja2 HTML template
+├── tests/
+├── pyproject.toml
+└── README.md
+```
+
+## Checks Implemented
+
+| Check ID | Title | Category | Severity |
+|----------|-------|----------|----------|
+| AUTH-001 | Weak Password Policy | Authentication | HIGH |
+| AUTH-002 | Missing Multi-Factor Authentication | Authentication | MEDIUM |
+| AUTH-003 | Default Credentials | Authentication | CRITICAL |
+| RATE-001 | Missing Rate Limiting on Login | Rate Limiting | HIGH |
+| RATE-002 | Weak Rate Limiting Configuration | Rate Limiting | MEDIUM |
+| ENUM-001 | Username Enumeration via Error Messages | User Enumeration | MEDIUM |
+| ENUM-002 | Username Enumeration via Timing Attack | User Enumeration | MEDIUM |
+| COOKIE-001 | Missing Secure Flag on Session Cookie | Session | HIGH |
+| COOKIE-002 | Missing HttpOnly Flag on Session Cookie | Session | HIGH |
+| COOKIE-003 | Missing SameSite Attribute | Session | MEDIUM |
+| CORS-001 | Overly Permissive CORS Policy | CORS/Headers | HIGH |
+| CORS-002 | Missing Security Headers | CORS/Headers | MEDIUM |
+| JWT-001 | Algorithm Confusion (RS256/HS256) | JWT | HIGH |
+| JWT-002 | Weak JWT Secret | JWT | CRITICAL |
+| JWT-003 | Missing Expiration Claim | JWT | HIGH |
+| JWT-004 | "none" Algorithm Accepted | JWT | CRITICAL |
+
+## Development
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Format code
+black authshield/
+ruff check authshield/
+
+# Type check
+mypy authshield/
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add your checks or improvements
+4. Run tests and linting
+5. Submit a PR
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Author
+
+Aditya (@Aditya0850) - Cybersecurity Enthusiast
+
+## References
+
+- [OWASP Authentication Cheat Sheet](https://owasp.org/www-project-authentication-cheat-sheet/)
+- [OWASP Session Management Cheat Sheet](https://owasp.org/www-project-session-management-cheat-sheet/)
+- [OWASP JWT Cheat Sheet](https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/)
+- [OWASP CORS Security Cheat Sheet](https://owasp.org/www-project-cors-security-cheat-sheet/)
