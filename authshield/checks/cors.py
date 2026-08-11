@@ -35,7 +35,7 @@ class CORSChecks:
                     "Access-Control-Request-Method": "POST",
                 })
 
-                if resp:
+                if resp is not None:
                     acao = resp.headers.get("Access-Control-Allow-Origin")
                     acac = resp.headers.get("Access-Control-Allow-Credentials")
 
