@@ -1,114 +1,117 @@
 from __future__ import annotations
 
-import time
-import statistics
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
-from authshield.core.models import Finding, Severity, Category
 from authshield.core.http_client import make_finding
+from authshield.core.models import Category, Severity
 
 
 class EnumChecks:
+    """Username enumeration checks.
+
+    Only uses SAFE methods:
+    - Error message comparison (passive observation of responses)
+    - HTTP status code analysis
+    - Response length/timing NOT used (unreliable over network)
+    """
+
     def __init__(self, scanner: Scanner):
         self.scanner = scanner
         self.client = scanner.client
+        # Common usernames to test - small, controlled set
+        self.TEST_USERNAMES: list[str] = [
+            "admin",
+            "administrator",
+            "test",
+            "user",
+            "nonexistentuser12345",  # Known invalid
+        ]
 
     def run_all(self):
         self.check_username_enumeration_error_messages()
-        self.check_username_enumeration_timing()
+        # Timing attack removed - unreliable over network, high false positive rate
 
     def check_username_enumeration_error_messages(self):
-        """ENUM-001: Username enumeration via error message differences"""
-        test_users = ["admin", "administrator", "test", "user", "john", "jane", "nonexistentuser12345"]
+        """ENUM-001: Username enumeration via error message/status differences.
 
+        Methodology:
+        - Submits same wrong password for multiple usernames
+        - Compares HTTP status codes AND error message content
+        - Reports only if DIFFERENT responses for valid vs invalid users
+        """
         responses = {}
-        for user in test_users:
+
+        for username in self.TEST_USERNAMES:
             resp = self.scanner.make_request("POST", "/login", data={
-                "username": user, "password": "wrongpassword123"
+                "username": username, "password": "wrongpassword123"
             })
-            if resp:
-                responses[user] = {
-                    "status": resp.status_code,
-                    "length": len(resp.text),
-                    "content": resp.text[:500]
-                }
-            time.sleep(0.1)
+            if not resp:
+                return  # Network issue - abort cleanly
+
+            responses[username] = {
+                "status": resp.status_code,
+                "length": len(resp.text),
+                "content": resp.text[:500],
+            }
 
         if len(responses) < 2:
             return
 
-        # Check for different error messages for valid vs invalid users
-        error_messages = {}
+        # Extract error signature from each response
+        signatures = {}
         for user, data in responses.items():
-            # Extract error message from response
             content = data["content"].lower()
-            # Common error patterns
-            if "invalid" in content or "incorrect" in content or "wrong" in content:
-                # Try to extract the actual error message
-                import re
-                error_match = re.search(r'(invalid|incorrect|wrong).*?(username|user|email|password|credentials)', content)
-                if error_match:
-                    error_messages[user] = error_match.group(0)
-                else:
-                    error_messages[user] = "generic_error"
-            else:
-                error_messages[user] = "no_error"
+            # Create a signature: status + normalized error message
+            error_sig = self._extract_error_signature(content, data["status"])
+            signatures[user] = error_sig
 
-        # Check if different users get different error messages
-        unique_errors = set(error_messages.values())
-        if len(unique_errors) > 1:
-            self.scanner.add_finding(make_finding(
-                check_id="ENUM-001",
-                title="Username Enumeration via Error Messages",
-                severity=Severity.MEDIUM,
-                category=Category.USER_ENUMERATION,
-                evidence_desc=f"Different error messages returned for different usernames: {error_messages}",
-                fix="Use generic error messages like 'Invalid username or password' for all failed login attempts",
-                references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
-                raw_data={"error_messages": error_messages},
-            ))
+        # Check if known-invalid user has different signature than potential valid users
+        invalid_sig = signatures.get("nonexistentuser12345")
+        if not invalid_sig:
+            return
 
-    def check_username_enumeration_timing(self):
-        """ENUM-002: Username enumeration via timing attacks"""
-        valid_user = "admin"  # Common username
-        invalid_user = "nonexistentuser123456789"
-
-        # Measure response times for valid username (wrong password)
-        valid_times = []
-        for _ in range(5):
-            start = time.time()
-            resp = self.scanner.make_request("POST", "/login", data={
-                "username": valid_user, "password": "wrongpassword"
-            })
-            valid_times.append(time.time() - start)
-            time.sleep(0.2)
-
-        # Measure response times for invalid username
-        invalid_times = []
-        for _ in range(5):
-            start = time.time()
-            resp = self.scanner.make_request("POST", "/login", data={
-                "username": invalid_user, "password": "wrongpassword"
-            })
-            invalid_times.append(time.time() - start)
-            time.sleep(0.2)
-
-        if valid_times and invalid_times:
-            avg_valid = statistics.mean(valid_times)
-            avg_invalid = statistics.mean(invalid_times)
-
-            # If valid user takes significantly longer (password hashing), might indicate user exists
-            if avg_valid > avg_invalid * 1.5 and avg_valid > 0.5:
+        for user, sig in signatures.items():
+            if user == "nonexistentuser12345":
+                continue
+            if sig != invalid_sig:
+                # Different response for this user vs known-invalid
                 self.scanner.add_finding(make_finding(
-                    check_id="ENUM-002",
-                    title="Potential Username Enumeration via Timing Attack",
+                    check_id="ENUM-001",
+                    title="Username Enumeration via Response Differences",
                     severity=Severity.MEDIUM,
                     category=Category.USER_ENUMERATION,
-                    evidence_desc=f"Valid username avg response: {avg_valid:.3f}s, Invalid username avg: {avg_invalid:.3f}s",
-                    fix="Use constant-time comparison for password verification. Hash passwords for non-existent users too.",
+                    evidence_desc=(
+                        f"Different response for '{user}' vs known-invalid username. "
+                        f"Invalid sig: {invalid_sig}, User sig: {sig}. "
+                        f"This allows username enumeration."
+                    ),
+                    fix=(
+                        "Use identical generic error messages and HTTP status codes "
+                        "for all failed login attempts (e.g., 'Invalid username or password', 401)."
+                    ),
                     references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
-                    raw_data={"valid_avg": avg_valid, "invalid_avg": avg_invalid, "ratio": avg_valid/avg_invalid if avg_invalid > 0 else 0},
+                    raw_data={"signatures": signatures, "methodology": "status + error content comparison"},
                 ))
+                return
+
+    def _extract_error_signature(self, content: str, status: int) -> str:
+        """Normalize error response into a comparable signature."""
+        # Extract the core error message
+        error_msg = "no_error"
+        if "invalid" in content or "incorrect" in content or "wrong" in content:
+            import re
+            match = re.search(r'(invalid|incorrect|wrong)[^.]*?(username|user|email|password|credential)', content)
+            if match:
+                # Normalize: replace specifics with placeholders
+                error_msg = match.group(0)
+                error_msg = re.sub(r'\b\w{4,}\b', '<value>', error_msg)
+            else:
+                error_msg = "generic_auth_error"
+        elif "rate" in content or "limit" in content:
+            error_msg = "rate_limit"
+        elif "captcha" in content:
+            error_msg = "captcha"
+        return f"{status}:{error_msg}"

@@ -1,55 +1,63 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
-import jwt
 import base64
 import json
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
-from authshield.core.models import Finding, Severity, Category
 from authshield.core.http_client import make_finding
+from authshield.core.models import Category, Severity
 
 
 class JWTChecks:
+    """JWT security checks.
+
+    Performs PASSIVE analysis of discovered tokens:
+    - Decodes headers/payloads (no verification)
+    - Checks for missing claims, weak algorithms
+    - Does NOT brute-force secrets
+    - Only tests 'none' algorithm if endpoint accepts it (active, but safe)
+    """
+
     def __init__(self, scanner: Scanner):
         self.scanner = scanner
         self.client = scanner.client
-        self.jwt_tokens: List[str] = []
+        self.jwt_tokens: list[str] = []
+        self.jwks_cache: dict | None = None
 
     def run_all(self):
         self.collect_jwt_tokens()
         if self.jwt_tokens:
             for token in self.jwt_tokens:
                 self.check_algorithm_confusion(token)
-                self.check_weak_secret(token)
                 self.check_missing_expiration(token)
                 self.check_none_algorithm(token)
 
     def collect_jwt_tokens(self):
-        # Check cookies
+        """Passively collect JWTs from cookies, headers, and response bodies."""
+        # Check cookies on root
         resp = self.scanner.make_request("GET", "/")
         if resp:
             for cookie in resp.cookies:
                 if self._looks_like_jwt(cookie.value):
                     self.jwt_tokens.append(cookie.value)
 
-        # Check Authorization header on authenticated endpoints
+        # Check Authorization header on authenticated endpoints (if cookies provided)
         for endpoint in ["/api/user", "/api/profile", "/api/me", "/dashboard"]:
             resp = self.scanner.make_request("GET", endpoint)
-            if resp:
+            if resp and hasattr(resp, 'request') and resp.request:
                 auth_header = resp.request.headers.get("Authorization", "")
                 if auth_header.startswith("Bearer "):
                     token = auth_header[7:]
                     if self._looks_like_jwt(token):
                         self.jwt_tokens.append(token)
 
-        # Check localStorage via JS (can't easily do this, but check response bodies)
+        # Check response bodies for embedded tokens (login pages, etc.)
         for endpoint in ["/login", "/api/auth/login", "/"]:
             resp = self.scanner.make_request("GET", endpoint)
             if resp:
-                # Search for JWT-like strings in response
                 import re
                 jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
                 matches = re.findall(jwt_pattern, resp.text)
@@ -64,80 +72,103 @@ class JWTChecks:
         parts = token.split(".")
         return len(parts) == 3 and all(part for part in parts)
 
-    def _decode_header(self, token: str) -> Optional[Dict]:
+    def _decode_header(self, token: str) -> dict[str, Any] | None:
         try:
             header_b64 = token.split(".")[0]
-            # Add padding if needed
             header_b64 += "=" * (-len(header_b64) % 4)
             header_json = base64.urlsafe_b64decode(header_b64)
-            return json.loads(header_json)
-        except Exception:
+            return json.loads(header_json)  # type: ignore[no-any-return]
+        except (ValueError, json.JSONDecodeError):
             return None
 
-    def _decode_payload(self, token: str) -> Optional[Dict]:
+    def _decode_payload(self, token: str) -> dict[str, Any] | None:
         try:
             payload_b64 = token.split(".")[1]
             payload_b64 += "=" * (-len(payload_b64) % 4)
             payload_json = base64.urlsafe_b64decode(payload_b64)
-            return json.loads(payload_json)
-        except Exception:
+            return json.loads(payload_json)  # type: ignore[no-any-return]
+        except (ValueError, json.JSONDecodeError):
             return None
 
+    def _fetch_jwks(self, base_url: str) -> dict | None:
+        """Fetch JWKS from standard endpoints if not cached."""
+        if self.jwks_cache:
+            return self.jwks_cache
+
+        jwks_endpoints = [
+            "/.well-known/jwks.json",
+            "/jwks.json",
+            "/keys",
+            "/auth/keys",
+            "/oauth2/keys",
+        ]
+
+        for endpoint in jwks_endpoints:
+            resp = self.scanner.make_request("GET", endpoint)
+            if resp and resp.status_code == 200:
+                try:
+                    self.jwks_cache = resp.json()
+                    return self.jwks_cache
+                except (ValueError, TypeError):
+                    continue
+        return None
+
     def check_algorithm_confusion(self, token: str):
-        """JWT-001: Check for algorithm confusion (RS256/HS256)"""
+        """JWT-001: Check for RS256 algorithm confusion risk.
+
+        Only reports HIGH if:
+        - Token uses RS256/ES256 (asymmetric)
+        - AND public JWKS is discoverable
+        - AND no algorithm pinning evidence found
+
+        This is a configuration risk, not an exploit.
+        """
         header = self._decode_header(token)
         if not header:
             return
 
         alg = header.get("alg", "").upper()
-        if alg == "RS256":
-            # Check if we can sign with HS256 using public key as secret
-            # This is a theoretical check - we can't actually test without the key
+        if alg not in ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512"):
+            return
+
+        # Check if JWKS is publicly accessible
+        jwks = self._fetch_jwks(self.scanner.target)
+        if not jwks:
+            # No public keys found - lower risk
             self.scanner.add_finding(make_finding(
                 check_id="JWT-001",
-                title="JWT Uses RS256 - Potential Algorithm Confusion",
-                severity=Severity.HIGH,
+                title="JWT Uses Asymmetric Algorithm - Verify Algorithm Pinning",
+                severity=Severity.INFO,  # Downgraded: risk only if keys exposed
                 category=Category.JWT,
-                evidence_desc=f"Token uses RS256 algorithm. If public key is exposed, HS256 confusion attack possible",
-                fix="Use RS256/ES256 with proper key validation. Ensure library rejects tokens with unexpected algorithms. Pin expected algorithm.",
+                evidence_desc=f"Token uses {alg} algorithm. Public JWKS endpoint not discovered.",
+                fix=(
+                    "Ensure JWT library pins expected algorithm (reject HS256 for RS256 tokens). "
+                    "Validate 'alg' header matches expected. Use library defaults that enforce this."
+                ),
                 references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
-                raw_data={"algorithm": alg, "header": header},
+                raw_data={"algorithm": alg, "header": header, "jwks_found": False},
             ))
-
-    def check_weak_secret(self, token: str):
-        """JWT-002: Check for weak JWT secret (HS256)"""
-        header = self._decode_header(token)
-        if not header:
             return
 
-        alg = header.get("alg", "").upper()
-        if alg == "HS256":
-            # Try common weak secrets
-            weak_secrets = [
-                "secret", "secretkey", "jwtsecret", "mysecret", "password",
-                "changeme", "secret123", "jwt", "key", "supersecret",
-                "authsecret", "signingkey", "hs256secret", ""
-            ]
-
-            for secret in weak_secrets:
-                try:
-                    jwt.decode(token, secret, algorithms=["HS256"])
-                    self.scanner.add_finding(make_finding(
-                        check_id="JWT-002",
-                        title="Weak JWT Secret Detected",
-                        severity=Severity.CRITICAL,
-                        category=Category.JWT,
-                        evidence_desc=f"JWT signed with weak secret: '{secret}'",
-                        fix="Use strong random secret (256+ bits). Rotate secrets regularly. Use RS256/ES256 for asymmetric signing.",
-                        references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
-                        raw_data={"algorithm": alg, "weak_secret": secret},
-                    ))
-                    return
-                except jwt.InvalidSignatureError:
-                    continue
+        # JWKS found - higher risk if algorithm not pinned
+        self.scanner.add_finding(make_finding(
+            check_id="JWT-001",
+            title="JWT Algorithm Confusion Risk (RS256 with Public JWKS)",
+            severity=Severity.MEDIUM,  # Medium: requires specific conditions
+            category=Category.JWT,
+            evidence_desc=f"Token uses {alg} algorithm AND public JWKS is accessible at known endpoint. "
+                          "If library doesn't pin algorithm, HS256 confusion attack possible.",
+            fix=(
+                "Pin expected algorithm in JWT verification. "
+                "Reject tokens with unexpected 'alg'. "
+                "Use libraries that enforce algorithm validation by default."
+            ),
+            references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
+            raw_data={"algorithm": alg, "header": header, "jwks_found": True},
+        ))
 
     def check_missing_expiration(self, token: str):
-        """JWT-003: Check for missing expiration claim"""
+        """JWT-003: Check for missing or excessive expiration claims."""
         payload = self._decode_payload(token)
         if not payload:
             return
@@ -149,12 +180,11 @@ class JWTChecks:
                 severity=Severity.HIGH,
                 category=Category.JWT,
                 evidence_desc="JWT does not contain 'exp' (expiration) claim - token never expires",
-                fix="Always include 'exp' claim with reasonable lifetime (e.g., 15-60 min for access tokens). Use 'iat' and 'nbf' as well.",
+                fix="Always include 'exp' claim with reasonable lifetime (15-60 min for access tokens). Use 'iat' and 'nbf' as well.",
                 references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                 raw_data={"payload_keys": list(payload.keys())},
             ))
         else:
-            # Check if expiration is too far in future
             import time
             exp = payload["exp"]
             now = int(time.time())
@@ -171,31 +201,56 @@ class JWTChecks:
                 ))
 
     def check_none_algorithm(self, token: str):
-        """JWT-004: Check if 'none' algorithm is accepted"""
-        # Create a token with 'none' algorithm
-        try:
-            header = {"alg": "none", "typ": "JWT"}
-            payload = {"sub": "test", "iat": 1234567890}
-            import base64
-            header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
-            payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-            none_token = f"{header_b64}.{payload_b64}."
+        """JWT-004: Test if endpoint accepts 'none' algorithm token.
 
-            # Try to decode with 'none' algorithm allowed
-            jwt.decode(none_token, options={"verify_signature": False})
-            # This means library accepts 'none' - but we need to test actual endpoint
-            # For now, find if any token uses 'none'
-            header = self._decode_header(token)
-            if header and header.get("alg", "").lower() == "none":
-                self.scanner.add_finding(make_finding(
-                    check_id="JWT-004",
-                    title="JWT Uses 'none' Algorithm",
-                    severity=Severity.CRITICAL,
-                    category=Category.JWT,
-                    evidence_desc="JWT uses 'none' algorithm - no signature verification",
-                    fix="Reject tokens with 'none' algorithm. Configure JWT library to require signature verification.",
-                    references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
-                    raw_data={"algorithm": "none"},
-                ))
-        except Exception:
-            pass
+        Sends a crafted 'none' algorithm token to a protected endpoint
+        and checks if it's accepted (not rejected due to algorithm).
+        """
+        # First, check if any scanned token uses 'none' (passive)
+        header = self._decode_header(token)
+        if header and header.get("alg", "").lower() == "none":
+            self.scanner.add_finding(make_finding(
+                check_id="JWT-004",
+                title="JWT Uses 'none' Algorithm (Passive Detection)",
+                severity=Severity.CRITICAL,
+                category=Category.JWT,
+                evidence_desc="Discovered JWT uses 'none' algorithm - no signature verification",
+                fix="Reject tokens with 'none' algorithm. Configure JWT library to require signature verification.",
+                references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
+                raw_data={"algorithm": "none"},
+            ))
+            return
+
+        # Active test: send 'none' token to a protected endpoint
+        # Only if we have a protected endpoint to test against
+        protected_endpoints = ["/api/user", "/api/profile", "/api/me"]
+        for endpoint in protected_endpoints:
+            # First check if endpoint requires auth
+            resp = self.scanner.make_request("GET", endpoint)
+            if resp and resp.status_code in (401, 403):
+                # Craft a 'none' algorithm token
+                try:
+                    none_header = {"alg": "none", "typ": "JWT"}
+                    none_payload = {"sub": "test", "iat": 1234567890, "test": True}
+                    header_b64 = base64.urlsafe_b64encode(json.dumps(none_header).encode()).decode().rstrip("=")
+                    payload_b64 = base64.urlsafe_b64encode(json.dumps(none_payload).encode()).decode().rstrip("=")
+                    none_token = f"{header_b64}.{payload_b64}."
+
+                    # Send it
+                    test_resp = self.scanner.make_request("GET", endpoint, headers={
+                        "Authorization": f"Bearer {none_token}"
+                    })
+                    if test_resp and test_resp.status_code == 200:
+                        self.scanner.add_finding(make_finding(
+                            check_id="JWT-004",
+                            title="Endpoint Accepts 'none' Algorithm JWT",
+                            severity=Severity.CRITICAL,
+                            category=Category.JWT,
+                            evidence_desc=f"Endpoint {endpoint} accepted a JWT with 'alg=none' (no signature)",
+                            fix="Configure JWT library to reject 'none' algorithm. Require signature verification.",
+                            references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
+                            raw_data={"endpoint": endpoint, "algorithm": "none"},
+                        ))
+                        return
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    pass

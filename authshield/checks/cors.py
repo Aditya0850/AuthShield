@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
-from authshield.core.models import Finding, Severity, Category
 from authshield.core.http_client import make_finding
+from authshield.core.models import Category, Severity
 
 
 class CORSChecks:

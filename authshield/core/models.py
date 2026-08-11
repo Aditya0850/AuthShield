@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
 from datetime import datetime
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class Severity(str, Enum):
@@ -25,9 +26,9 @@ class Category(str, Enum):
 
 class Evidence(BaseModel):
     description: str
-    raw_data: Optional[Dict[str, Any]] = None
-    request: Optional[str] = None
-    response: Optional[str] = None
+    raw_data: dict[str, Any] | None = None
+    request: str | None = None
+    response: str | None = None
 
 
 class Finding(BaseModel):
@@ -37,8 +38,8 @@ class Finding(BaseModel):
     category: Category
     evidence: Evidence
     fix: str
-    references: List[str] = Field(default_factory=list)
-    cvss_score: Optional[float] = None
+    references: list[str] = Field(default_factory=list)
+    cvss_score: float | None = None
 
 
 class ScanSummary(BaseModel):
@@ -67,7 +68,7 @@ class ScanSummary(BaseModel):
 class ScanResult(BaseModel):
     target: str
     scan_time: datetime = Field(default_factory=datetime.utcnow)
-    findings: List[Finding] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
     summary: ScanSummary = Field(default_factory=ScanSummary)
     scan_duration: float = 0.0
 
@@ -75,8 +76,8 @@ class ScanResult(BaseModel):
         self.findings.append(finding)
         self.summary.increment(finding.severity)
 
-    def get_findings_by_severity(self, severity: Severity) -> List[Finding]:
+    def get_findings_by_severity(self, severity: Severity) -> list[Finding]:
         return [f for f in self.findings if f.severity == severity]
 
-    def get_findings_by_category(self, category: Category) -> List[Finding]:
+    def get_findings_by_category(self, category: Category) -> list[Finding]:
         return [f for f in self.findings if f.category == category]

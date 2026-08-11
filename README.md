@@ -1,174 +1,281 @@
-# AuthShield - Web Authentication Security Auditor
+# AuthShield
 
-A Python-based security auditing tool that automatically detects authentication, session, CORS and JWT misconfigurations in web applications and generates evidence-based vulnerability reports with remediation guidance.
+> **Web Authentication Security Auditor** — Conservative, testable scanner for authentication, session, CORS, and JWT misconfigurations.
 
-## Features
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-🔐 **Weak Authentication Detection** - Identifies weak password policies, missing MFA, default credentials  
-🚫 **Rate Limiting Checks** - Detects missing or weak rate limiting on auth endpoints  
-👤 **User Enumeration** - Finds username enumeration via timing attacks, error messages, response differences  
-🍪 **Session Cookie Security** - Checks for missing Secure, HttpOnly, SameSite flags  
-🌐 **CORS & Security Headers** - Validates CORS configuration and security headers (CSP, HSTS, X-Frame-Options, etc.)  
-🔑 **JWT Misconfigurations** - Detects algorithm confusion, weak secrets, missing expiration, none algorithm  
+AuthShield is a **passive-first** security scanner that audits web applications for common authentication and session management vulnerabilities. It prioritizes **correctness over coverage** — every check has a clear, documented methodology and avoids unreliable or destructive testing approaches.
 
-## Installation
+---
+
+## ⚡ Quick Start
 
 ```bash
-pip install -e .
-```
-
-Or install from PyPI (when published):
-```bash
+# Install
 pip install authshield
+
+# Scan a target
+authshield scan http://localhost:5000
+
+# With custom options
+authshield scan http://example.com \
+  -e "/login,/register,/api/auth" \
+  -c "session=abc123" \
+  -H "Authorization: Bearer token" \
+  -f both \
+  -o my-report
 ```
 
-## Usage
+---
 
-### Basic Scan
+## 🔍 Implemented Security Checks
+
+AuthShield implements **9 conservative checks** across 5 categories. Each check has a documented methodology and request budget.
+
+| Check ID | Title | Category | Severity | Methodology |
+|----------|-------|----------|----------|-------------|
+| **AUTH-001** | Weak Password Policy Indicator | Authentication | MEDIUM | Passive regex scan of registration pages for "at least X chars" where X ≤ 5 |
+| **RATE-001** | Missing Rate Limiting on Login | Rate Limiting | HIGH | Sends 5 rapid POST requests to login endpoint; checks if all return 2xx/4xx (success/unblocked) |
+| **ENUM-001** | Username Enumeration via Error Messages | User Enumeration | MEDIUM | Compares error response signatures (status code + normalized error text) for valid vs invalid usernames |
+| **COOKIE-001** | Missing Secure Flag on Session Cookie | Session | HIGH | Inspects `Set-Cookie` headers; flags session cookies without `Secure` attribute |
+| **COOKIE-002** | Missing HttpOnly Flag on Session Cookie | Session | HIGH | Inspects `Set-Cookie` headers; flags session cookies without `HttpOnly` attribute |
+| **COOKIE-003** | Missing or Insecure SameSite Attribute | Session | HIGH | Inspects `Set-Cookie` headers; flags `SameSite=None` without `Secure`, or missing `SameSite` |
+| **CORS-001** | CORS Reflects Arbitrary Origin with Credentials | CORS/Headers | HIGH | Sends request with `Origin: https://evil.com`; checks if reflected with `Access-Control-Allow-Credentials: true` |
+| **CORS-002** | Missing or Weak Security Headers | CORS/Headers | HIGH | Checks for: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP |
+| **JWT-001** | JWT Algorithm Confusion Risk (RS256 + Public JWKS) | JWT | MEDIUM | Passive: detects RS256/ES256 tokens AND publicly accessible JWKS endpoint |
+| **JWT-003** | Missing or Excessive Expiration Claim | JWT | HIGH/MEDIUM | Passive: decodes JWT payload; flags missing `exp` (HIGH) or `exp` > 7 days (MEDIUM) |
+| **JWT-004** | Endpoint Accepts `none` Algorithm JWT | JWT | CRITICAL | Active (safe): crafts `alg=none` token, sends to protected endpoint; checks if accepted (200 OK) |
+
+### Checks Intentionally NOT Implemented
+
+| Check | Reason |
+|-------|--------|
+| Credential Stuffing / Brute Force | Unethical, unreliable, often blocked by WAFs |
+| Default Credentials (AUTH-003) | Requires credential lists; high false positive rate |
+| MFA Detection (AUTH-002) | Cannot reliably detect without authentication |
+| Timing-based Enum (ENUM-002) | Network variance makes timing unreliable over internet |
+| Weak Secret Brute-force (JWT-002) | Computationally infeasible; not a scanner's role |
+| JWT-002 (Weak Secret) | Requires offline cracking; out of scope |
+
+---
+
+## 📊 Output Formats
+
+### JSON Report (`-f json` or `-f both`)
+Machine-readable structured output with findings, evidence, and remediation guidance.
+
+```json
+{
+  "target": "http://localhost:5000",
+  "scan_time": "2026-08-11T07:39:12.478650Z",
+  "scan_duration": 38.81,
+  "summary": { "critical": 0, "high": 5, "medium": 1, "low": 0, "info": 0, "total": 6 },
+  "findings": [
+    {
+      "id": "COOKIE-001",
+      "title": "Missing Secure Flag on Session Cookie",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": { "description": "...", "raw_data": {...} },
+      "fix": "Set Secure flag on all session cookies...",
+      "references": ["https://owasp.org/..."]
+    }
+  ]
+}
+```
+
+### HTML Report (`-f html` or `-f both`)
+Human-readable report grouped by severity and category with collapsible evidence details.
+
+---
+
+## 🧪 Local Testing with VulnApp
+
+AuthShield includes a **deliberately vulnerable Flask application** (`vuln_app.py`) that demonstrates all detectable issues.
+
 ```bash
-authshield scan https://example.com
+# Terminal 1: Start the vulnerable app
+pip install flask pyjwt cryptography werkzeug
+python vuln_app.py
+# Running on http://localhost:5000
+
+# Terminal 2: Run AuthShield scan
+authshield scan http://localhost:5000 -f both -o vulnapp-report
+
+# Expected findings (6 total):
+# - 1 MEDIUM: AUTH-001 (weak password policy: min 4 chars)
+# - 3 HIGH:   COOKIE-001, COOKIE-002, COOKIE-003 (insecure session cookies)
+# - 2 HIGH:   CORS-001 (reflects arbitrary origin + credentials), CORS-002 (missing security headers)
 ```
 
-### With Options
-```bash
-# Scan specific endpoints
-authshield scan https://example.com --endpoints /login,/register,/api/auth
+> ⚠️ **WARNING**: `vuln_app.py` contains INTENTIONAL vulnerabilities. Never deploy to production. For local testing only.
 
-# Output format
-authshield scan https://example.com --format json --output report.json
-authshield scan https://example.com --format html --output report.html
+### VulnApp Endpoints
 
-# Authenticated scan
-authshield scan https://example.com --cookie "session=abc123" --header "Authorization: Bearer token"
+| Endpoint | Purpose | Vulnerabilities Demonstrated |
+|----------|---------|------------------------------|
+| `GET /` | Home page | Sets insecure cookies (COOKIE-001/002/003) |
+| `GET /register` | Registration page | AUTH-001 (min 4 char password) |
+| `POST /login` | Login | RATE-001 (no rate limit), ENUM-001 (user enumeration via error diff) |
+| `GET /api/*` | Protected APIs | JWT-003 (30-day token expiry) |
+| `GET /.well-known/jwks.json` | JWKS | JWT-001 (public JWKS + RS256) |
+| `OPTIONS /api/*` | CORS preflight | CORS-001 (reflects any origin + credentials), CORS-002 (no security headers) |
 
-# Verbose output
-authshield scan https://example.com -v
+---
+
+## 🛡 Design Principles
+
+### Conservative by Default
+- **No brute force** — No credential stuffing, password spraying, or secret cracking
+- **No destructive actions** — Only GET/POST requests that mimic normal browser behavior
+- **Request budgets** — Default max 100 requests per scan; configurable via `--max-requests`
+- **Passive-first** — 8 of 11 checks are purely passive observation
+
+### Testable & Explainable
+- **50+ unit tests** with mocked HTTP responses — zero external dependencies
+- **Every finding includes** raw evidence, clear fix guidance, and OWASP references
+- **Clear methodology** documented per-check in source code (`authshield/checks/*.py`)
+
+### Reliability Over Coverage
+- Removed timing-based checks (network variance over internet is too high)
+- Removed checks requiring credential lists (high false positives)
+- Active tests (JWT-004, RATE-001) are safe and clearly documented
+
+---
+
+## ⚙️ Configuration
+
+### CLI Options
+
+```
+Usage: authshield scan [OPTIONS] TARGET
+
+Arguments:
+  TARGET                  Target URL (e.g., http://example.com)
+
+Options:
+  -e, --endpoints TEXT    Comma-separated endpoints to scan
+  -c, --cookie TEXT       Cookies in format 'name=value' (multiple)
+  -H, --header TEXT       Headers in format 'Name: Value' (multiple)
+  -t, --timeout INT       Request timeout in seconds (default: 10)
+  --no-ssl-verify         Disable SSL certificate verification
+  -f, --format [json|html|both]  Output format (default: both)
+  -o, --output TEXT       Output file path (without extension)
+  -v, --verbose           Verbose output
+  --max-requests INT      Maximum requests per scan (default: 100)
+  --help                  Show this message and exit.
 ```
 
-### List Available Checks
+### List All Checks
 ```bash
 authshield checks
 ```
 
-## Output Formats
-
-### JSON Report
-```json
-{
-  "target": "https://example.com",
-  "scan_time": "2024-01-15T10:30:00Z",
-  "findings": [
-    {
-      "id": "AUTH-001",
-      "title": "Weak Password Policy",
-      "severity": "HIGH",
-      "category": "authentication",
-      "evidence": "Password policy accepts 4-character passwords",
-      "fix": "Enforce minimum 12-character passwords with complexity requirements",
-      "references": ["https://owasp.org/www-project-authentication-cheat-sheet/"]
-    }
-  ],
-  "summary": {
-    "critical": 0,
-    "high": 2,
-    "medium": 3,
-    "low": 1,
-    "info": 0
-  }
-}
-```
-
-### HTML Report
-Generates a professional, interactive HTML report with findings grouped by severity, evidence details, and remediation guidance.
-
-## Project Structure
-
-```
-authshield/
-├── authshield/
-│   ├── __init__.py
-│   ├── cli.py              # CLI entry point
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── scanner.py      # Main scanner orchestration
-│   │   ├── http_client.py  # HTTP client with retry/logic
-│   │   └── models.py       # Pydantic models for findings
-│   ├── checks/
-│   │   ├── __init__.py
-│   │   ├── auth.py         # Authentication checks
-│   │   ├── rate_limit.py   # Rate limiting checks
-│   │   ├── enum.py         # User enumeration checks
-│   │   ├── cookies.py      # Session cookie checks
-│   │   ├── cors.py         # CORS & security headers
-│   │   └── jwt.py          # JWT misconfiguration checks
-│   └── reporting/
-│       ├── __init__.py
-│       ├── json_report.py  # JSON report generator
-│       └── html_report.py  # HTML report generator
-├── templates/
-│   └── report.html.j2      # Jinja2 HTML template
-├── tests/
-├── pyproject.toml
-└── README.md
-```
-
-## Checks Implemented
-
-| Check ID | Title | Category | Severity |
-|----------|-------|----------|----------|
-| AUTH-001 | Weak Password Policy | Authentication | HIGH |
-| AUTH-002 | Missing Multi-Factor Authentication | Authentication | MEDIUM |
-| AUTH-003 | Default Credentials | Authentication | CRITICAL |
-| RATE-001 | Missing Rate Limiting on Login | Rate Limiting | HIGH |
-| RATE-002 | Weak Rate Limiting Configuration | Rate Limiting | MEDIUM |
-| ENUM-001 | Username Enumeration via Error Messages | User Enumeration | MEDIUM |
-| ENUM-002 | Username Enumeration via Timing Attack | User Enumeration | MEDIUM |
-| COOKIE-001 | Missing Secure Flag on Session Cookie | Session | HIGH |
-| COOKIE-002 | Missing HttpOnly Flag on Session Cookie | Session | HIGH |
-| COOKIE-003 | Missing SameSite Attribute | Session | MEDIUM |
-| CORS-001 | Overly Permissive CORS Policy | CORS/Headers | HIGH |
-| CORS-002 | Missing Security Headers | CORS/Headers | MEDIUM |
-| JWT-001 | Algorithm Confusion (RS256/HS256) | JWT | HIGH |
-| JWT-002 | Weak JWT Secret | JWT | CRITICAL |
-| JWT-003 | Missing Expiration Claim | JWT | HIGH |
-| JWT-004 | "none" Algorithm Accepted | JWT | CRITICAL |
-
-## Development
-
+### Quick Scan (minimal output)
 ```bash
-# Install dev dependencies
+authshield quick http://example.com
+```
+
+---
+
+## 🏗 Development
+
+### Requirements
+- Python 3.10+
+- Dependencies: `click`, `httpx`, `pydantic`, `rich`, `jinja2`, `pyjwt`
+
+### Install in Development Mode
+```bash
+git clone https://github.com/Aditya0850/AuthShield
+cd AuthShield
 pip install -e ".[dev]"
+```
 
-# Run tests
-pytest
+### Run Tests
+```bash
+# All tests with coverage
+pytest --cov=authshield --cov-report=term-missing
 
-# Format code
-black authshield/
-ruff check authshield/
+# Specific module
+pytest tests/test_authshield.py::test_auth_checks -v
+```
 
-# Type check
+### Linting & Type Checking
+```bash
+ruff check .
 mypy authshield/
 ```
 
-## Contributing
+### Project Structure
+```
+authshield/
+├── cli.py                 # Click CLI entry point
+├── core/
+│   ├── http_client.py     # Conservative HTTP client (budget, retries, pooling)
+│   ├── models.py          # Pydantic models (Finding, ScanResult, Severity)
+│   └── scanner.py         # Main orchestration (request budget aware)
+├── checks/
+│   ├── auth.py            # AUTH-001: Weak password policy
+│   ├── rate_limit.py      # RATE-001: Login rate limiting
+│   ├── enum.py            # ENUM-001: User enumeration via error messages
+│   ├── cookies.py         # COOKIE-001/002/003: Session cookie flags
+│   ├── cors.py            # CORS-001/002: CORS & security headers
+│   └── jwt.py             # JWT-001/003/004: JWT security
+├── reporting/
+│   ├── html_report.py     # Jinja2 HTML reporter
+│   └── json_report.py     # JSON reporter
+└── __init__.py
+```
+
+---
+
+## 📋 Limitations & Known Gaps
+
+| Limitation | Impact | Mitigation |
+|------------|--------|------------|
+| No JavaScript rendering | Misses SPA-rendered auth forms | Provide endpoints manually via `-e` |
+| No authentication flow | Cannot test logged-in paths | Provide session cookies via `-c` |
+| Single-threaded | Slower on large targets | Use focused endpoint lists |
+| No WAF evasion | May be blocked by WAFs | Run from allowed IP; adjust timeout |
+| JWT-004 active test | Sends one malformed request | Safe: only tests algorithm confusion; no data access |
+
+---
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Add your checks or improvements
-4. Run tests and linting
-5. Submit a PR
+3. Add tests for new checks (mocked HTTP responses required)
+4. Ensure `ruff check .` and `mypy authshield/` pass
+5. Submit PR with clear description of check methodology
 
-## License
+### Adding a New Check
+1. Create `authshield/checks/new_check.py` with `NewChecks` class
+2. Implement `run_all()` method using `scanner.make_request()`
+3. Add findings via `scanner.add_finding(make_finding(...))`
+4. Register in `scanner.py` `__init__`
+5. Add mocked tests in `tests/test_authshield.py`
 
-MIT License - see LICENSE file for details.
+---
 
-## Author
+## 📝 Changelog
 
-Aditya (@Aditya0850) - Cybersecurity Enthusiast
+### v0.1.0 (2026-08-11)
+- Initial release with 9 checks across 5 categories
+- JSON + HTML reporting
+- VulnApp for local testing
+- Full test suite (50+ tests)
+- Conservative design: no brute force, no unreliable checks
 
-## References
+---
 
-- [OWASP Authentication Cheat Sheet](https://owasp.org/www-project-authentication-cheat-sheet/)
-- [OWASP Session Management Cheat Sheet](https://owasp.org/www-project-session-management-cheat-sheet/)
-- [OWASP JWT Cheat Sheet](https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/)
-- [OWASP CORS Security Cheat Sheet](https://owasp.org/www-project-cors-security-cheat-sheet/)
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## ⚠️ Disclaimer
+
+AuthShield is a **security auditing tool** for authorized testing only. The authors are not responsible for misuse. Always obtain explicit permission before scanning targets you do not own. The included `vuln_app.py` is for educational purposes only — never deploy to production.

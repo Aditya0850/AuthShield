@@ -1,28 +1,48 @@
 from __future__ import annotations
 
 import time
-import random
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from authshield.core.models import Finding, Severity, Category, Evidence
+from authshield.core.models import Category, Evidence, Finding, Severity
 
 
 class HTTPClient:
+    """Conservative HTTP client for security scanning.
+
+    Features:
+    - Strict request limits per session
+    - No redirects on state-changing methods
+    - Conservative timeouts
+    - Connection pooling limits
+    - Request counting for safety
+    """
+
+    # Safety limits
+    MAX_REQUESTS_PER_SESSION = 100
+    MAX_RETRIES = 2
+    DEFAULT_TIMEOUT = 10
+    CONNECT_TIMEOUT = 5
+
     def __init__(
         self,
-        timeout: int = 10,
-        max_retries: int = 3,
-        backoff_factor: float = 0.3,
-        user_agent: str = "AuthShield/0.1.0",
-        cookies: Optional[Dict[str, str]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        follow_redirects: bool = True,
+        timeout: int = DEFAULT_TIMEOUT,
+        max_retries: int = MAX_RETRIES,
+        backoff_factor: float = 0.5,
+        user_agent: str = "AuthShield/0.1.0 (+https://github.com/Aditya0850/AuthShield)",
+        cookies: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        follow_redirects: bool = False,  # Safe default: no redirects on POST
         verify_ssl: bool = True,
+        max_requests: int = MAX_REQUESTS_PER_SESSION,
     ):
         self.timeout = timeout
+        self.max_retries = max_retries  # Store for testing/inspection
+        self.max_requests = max_requests
+        self.request_count = 0
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
         if cookies:
@@ -30,15 +50,30 @@ class HTTPClient:
         if headers:
             self.session.headers.update(headers)
 
+        # Conservative retry strategy - only on safe methods and specific codes
         retry_strategy = Retry(
             total=max_retries,
             backoff_factor=backoff_factor,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            status_forcelist=[429, 502, 503, 504],  # Removed 500 - might be app error
+            allowed_methods=["HEAD", "GET", "OPTIONS"],  # No retry on POST/PUT/DELETE
+            raise_on_status=False,
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=5,
+            pool_maxsize=5,
+        )
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+
+    def _check_request_budget(self) -> None:
+        """Enforce request limit to prevent abuse."""
+        if self.request_count >= self.max_requests:
+            raise HTTPClientError(
+                f"Request limit ({self.max_requests}) reached. "
+                "Scan aborted for safety."
+            )
+        self.request_count += 1
 
     def request(
         self,
@@ -46,17 +81,30 @@ class HTTPClient:
         url: str,
         **kwargs
     ) -> requests.Response:
-        start_time = time.time()
-        kwargs.setdefault("timeout", self.timeout)
-        kwargs.setdefault("verify", True)
-        kwargs.setdefault("allow_redirects", True)
+        """Make HTTP request with safety checks."""
+        self._check_request_budget()
 
+        # No redirects on state-changing methods
+        if method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
+            kwargs.setdefault("allow_redirects", False)
+        else:
+            kwargs.setdefault("allow_redirects", True)
+
+        kwargs.setdefault("timeout", (self.CONNECT_TIMEOUT, self.timeout))
+        kwargs.setdefault("verify", True)
+
+        start_time = time.time()
         try:
             response = self.session.request(method, url, **kwargs)
-            response.elapsed_time = time.time() - start_time
+            # Attach timing for analysis
+            response.elapsed_time = time.time() - start_time  # type: ignore[attr-defined]
             return response
+        except requests.Timeout:
+            raise HTTPClientError(f"Request timeout after {self.timeout}s") from None
+        except requests.TooManyRedirects:
+            raise HTTPClientError("Too many redirects") from None
         except requests.RequestException as e:
-            raise HTTPClientError(f"Request failed: {str(e)}") from e
+            raise HTTPClientError(f"Request failed: {e!s}") from e
 
     def get(self, url: str, **kwargs) -> requests.Response:
         return self.request("GET", url, **kwargs)
@@ -73,9 +121,13 @@ class HTTPClient:
     def close(self):
         self.session.close()
 
+    @property
+    def requests_remaining(self) -> int:
+        return max(0, self.max_requests - self.request_count)
+
 
 class HTTPClientError(Exception):
-    pass
+    """HTTP client error - safe to display to user."""
 
 
 def make_finding(
@@ -85,12 +137,13 @@ def make_finding(
     category: Category,
     evidence_desc: str,
     fix: str,
-    references: Optional[List[str]] = None,
-    raw_data: Optional[Dict[str, Any]] = None,
-    request: Optional[str] = None,
-    response: Optional[str] = None,
-    cvss_score: Optional[float] = None,
+    references: list[str] | None = None,
+    raw_data: dict[str, Any] | None = None,
+    request: str | None = None,
+    response: str | None = None,
+    cvss_score: float | None = None,
 ) -> Finding:
+    """Factory for creating Finding objects with consistent structure."""
     return Finding(
         id=check_id,
         title=title,

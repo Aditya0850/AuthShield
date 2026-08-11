@@ -1,20 +1,25 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
+import os
+import sys
+
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-import json
+from rich.progress import Progress, TextColumn
+from rich.table import Table
 
+from authshield.core.models import Severity
 from authshield.core.scanner import Scanner
-from authshield.core.models import Severity, Category, ScanResult
-from authshield.reporting.json_report import JSONReporter
 from authshield.reporting.html_report import HTMLReporter
+from authshield.reporting.json_report import JSONReporter
 
-
-console = Console()
+# Force UTF-8 encoding on Windows
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    console = Console(force_terminal=True, legacy_windows=False)
+else:
+    console = Console()
 
 
 @click.group()
@@ -25,7 +30,6 @@ def cli():
     Automatically checks web applications for authentication, session,
     CORS, and JWT misconfigurations.
     """
-    pass
 
 
 @cli.command()
@@ -66,7 +70,7 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         f"[bold]Endpoints:[/bold] {len(endpoint_list) if endpoint_list else 'default'}\n"
         f"[bold]Cookies:[/bold] {len(cookie_dict)}\n"
         f"[bold]Headers:[/bold] {len(header_dict)}",
-        title="🛡️ AuthShield Scan",
+        title="AuthShield Scan",
         border_style="blue"
     ))
 
@@ -81,7 +85,6 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
     )
 
     with Progress(
-        SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
@@ -128,39 +131,34 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
     if output_format in ("json", "both"):
         json_path = f"{output}.json" if output else "authshield-report.json"
         JSONReporter.generate(result, json_path)
-        console.print(f"\n[green]✓[/green] JSON report saved to: {json_path}")
+        console.print(f"\n[green]OK[/green] JSON report saved to: {json_path}")
 
     if output_format in ("html", "both"):
         html_path = f"{output}.html" if output else "authshield-report.html"
         HTMLReporter.generate(result, html_path)
-        console.print(f"[green]✓[/green] HTML report saved to: {html_path}")
+        console.print(f"[green]OK[/green] HTML report saved to: {html_path}")
 
     if total > 0:
-        console.print(f"\n[yellow]⚠[/yellow] Found {total} security issue(s). Review the reports for remediation guidance.")
+        console.print(f"\n[yellow]WARNING[/yellow] Found {total} security issue(s). Review the reports for remediation guidance.")
     else:
-        console.print(f"\n[green]✓[/green] No security issues found!")
+        console.print("\n[green]OK[/green] No security issues found!")
 
 
 @cli.command()
 def checks():
     """List all available security checks."""
     checks_data = [
-        ("AUTH-001", "Weak Password Policy", "Authentication", "HIGH"),
-        ("AUTH-002", "Missing Multi-Factor Authentication", "Authentication", "MEDIUM"),
-        ("AUTH-003", "Default Credentials", "Authentication", "CRITICAL"),
+        ("AUTH-001", "Weak Password Policy Indicator", "Authentication", "MEDIUM"),
         ("RATE-001", "Missing Rate Limiting on Login", "Rate Limiting", "HIGH"),
-        ("RATE-002", "Weak Rate Limiting Configuration", "Rate Limiting", "MEDIUM"),
         ("ENUM-001", "Username Enumeration via Error Messages", "User Enumeration", "MEDIUM"),
-        ("ENUM-002", "Username Enumeration via Timing Attack", "User Enumeration", "MEDIUM"),
         ("COOKIE-001", "Missing Secure Flag on Session Cookie", "Session", "HIGH"),
         ("COOKIE-002", "Missing HttpOnly Flag on Session Cookie", "Session", "HIGH"),
-        ("COOKIE-003", "Missing SameSite Attribute", "Session", "MEDIUM"),
-        ("CORS-001", "Overly Permissive CORS Policy", "CORS/Headers", "HIGH"),
-        ("CORS-002", "Missing Security Headers", "CORS/Headers", "MEDIUM"),
-        ("JWT-001", "Algorithm Confusion (RS256/HS256)", "JWT", "HIGH"),
-        ("JWT-002", "Weak JWT Secret", "JWT", "CRITICAL"),
-        ("JWT-003", "Missing Expiration Claim", "JWT", "HIGH"),
-        ("JWT-004", "'none' Algorithm Accepted", "JWT", "CRITICAL"),
+        ("COOKIE-003", "Missing or Insecure SameSite Attribute", "Session", "HIGH"),
+        ("CORS-001", "CORS Reflects Arbitrary Origin with Credentials", "CORS/Headers", "HIGH"),
+        ("CORS-002", "Missing or Weak Security Headers", "CORS/Headers", "HIGH"),
+        ("JWT-001", "JWT Algorithm Confusion Risk (RS256 + Public JWKS)", "JWT", "MEDIUM"),
+        ("JWT-003", "Missing or Excessive Expiration Claim", "JWT", "HIGH/MEDIUM"),
+        ("JWT-004", "Endpoint Accepts 'none' Algorithm JWT", "JWT", "CRITICAL"),
     ]
 
     table = Table(title="AuthShield Security Checks", show_header=True, header_style="bold cyan")
@@ -170,13 +168,15 @@ def checks():
     table.add_column("Severity")
 
     for check_id, title, category, severity in checks_data:
+        # Handle multi-severity values
+        base_severity = severity.split("/")[0]
         color = {
             "CRITICAL": "red",
             "HIGH": "orange3",
             "MEDIUM": "yellow",
             "LOW": "green",
             "INFO": "blue",
-        }[severity]
+        }[base_severity]
         table.add_row(check_id, title, category, f"[{color}]{severity}[/{color}]")
 
     console.print(table)

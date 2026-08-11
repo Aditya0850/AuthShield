@@ -1,1 +1,47 @@
-*.pyc\n__pycache__/\n*.egg-info/\n.pytest_cache/\n.coverage\nhtmlcov/\n.dist/\nbuild/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test reports
+report*.json
+report*.html
+test_final.json
+*.log
+
+# AuthShield specific
+vuln_app.log

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
-import re
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
-from authshield.core.models import Finding, Severity, Category
 from authshield.core.http_client import make_finding
+from authshield.core.models import Category, Severity
 
 
 class CookieChecks:
@@ -28,9 +27,7 @@ class CookieChecks:
 
         cookies = resp.cookies
         for cookie in cookies:
-            if not cookie.secure:
-                # Check if it's a session cookie
-                if self._is_session_cookie(cookie.name):
+            if not cookie.secure and self._is_session_cookie(cookie.name):
                     self.scanner.add_finding(make_finding(
                         check_id="COOKIE-001",
                         title="Missing Secure Flag on Session Cookie",
@@ -50,8 +47,8 @@ class CookieChecks:
 
         cookies = resp.cookies
         for cookie in cookies:
-            if not cookie.has_nonstandard_attr("HttpOnly") and "httponly" not in str(cookie).lower():
-                if self._is_session_cookie(cookie.name):
+            if (not cookie.has_nonstandard_attr("HttpOnly") and "httponly" not in str(cookie).lower()
+                    and self._is_session_cookie(cookie.name)):
                     self.scanner.add_finding(make_finding(
                         check_id="COOKIE-002",
                         title="Missing HttpOnly Flag on Session Cookie",
@@ -72,8 +69,7 @@ class CookieChecks:
         cookies = resp.cookies
         for cookie in cookies:
             samesite = getattr(cookie, 'samesite', None)
-            if not samesite or samesite.lower() == "none":
-                if self._is_session_cookie(cookie.name):
+            if (not samesite or samesite.lower() == "none") and self._is_session_cookie(cookie.name):
                     severity = Severity.HIGH if samesite is None else Severity.MEDIUM
                     self.scanner.add_finding(make_finding(
                         check_id="COOKIE-003",

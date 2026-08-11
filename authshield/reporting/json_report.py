@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
-import os
-
 from authshield.core.models import ScanResult
 
 
 class JSONReporter:
     @staticmethod
-    def generate(result: ScanResult, output_path: Optional[str] = None) -> str:
+    def generate(result: ScanResult, output_path: str | None = None) -> str:
         import json
         data = {
             "target": result.target,

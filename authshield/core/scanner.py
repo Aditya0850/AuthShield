@@ -1,49 +1,61 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional, Callable
 import time
-from urllib.parse import urljoin, urlparse
+from typing import Any, ClassVar
+from urllib.parse import urljoin
 
-from authshield.core.models import Finding, ScanResult, Severity, Category
 from authshield.core.http_client import HTTPClient, HTTPClientError
-from authshield.checks.auth import AuthChecks
-from authshield.checks.rate_limit import RateLimitChecks
-from authshield.checks.enum import EnumChecks
-from authshield.checks.cookies import CookieChecks
-from authshield.checks.cors import CORSChecks
-from authshield.checks.jwt import JWTChecks
+from authshield.core.models import Finding, ScanResult, Severity
 
 
 class Scanner:
+    """Main scanner orchestration.
+
+    Responsibilities:
+    - Manage HTTP client lifecycle
+    - Coordinate check modules
+    - Aggregate findings
+    - Handle scan-level errors
+    """
+    # Default auth-related endpoints to test - defined as class attribute
+    DEFAULT_ENDPOINTS: ClassVar[list[str]] = [
+        "/login", "/signin", "/auth/login", "/api/login",
+        "/register", "/signup", "/auth/register", "/api/register",
+        "/password/reset", "/forgot-password", "/api/password/reset",
+    ]
+
     def __init__(
         self,
         target: str,
-        endpoints: Optional[List[str]] = None,
-        cookies: Optional[Dict[str, str]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        endpoints: list[str] | None = None,
+        cookies: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
         timeout: int = 10,
         verify_ssl: bool = True,
         verbose: bool = False,
+        max_requests: int = 100,
     ):
         self.target = target.rstrip("/")
-        self.endpoints = endpoints or [
-            "/login", "/signin", "/auth/login", "/api/login",
-            "/register", "/signup", "/auth/register", "/api/register",
-            "/password/reset", "/forgot-password", "/api/password/reset",
-        ]
+        self.endpoints = endpoints or self.DEFAULT_ENDPOINTS
         self.client = HTTPClient(
             timeout=timeout,
             cookies=cookies,
             headers=headers,
             verify_ssl=verify_ssl,
+            max_requests=max_requests,
         )
         self.verbose = verbose
         self.result = ScanResult(target=target)
-        self._checks: List[Callable] = []
+        self._scan_start_time: float | None = None
 
-        self._register_checks()
+        # Initialize check modules - imports here to avoid circular imports
+        from authshield.checks.auth import AuthChecks
+        from authshield.checks.cookies import CookieChecks
+        from authshield.checks.cors import CORSChecks
+        from authshield.checks.enum import EnumChecks
+        from authshield.checks.jwt import JWTChecks
+        from authshield.checks.rate_limit import RateLimitChecks
 
-    def _register_checks(self):
         self.auth_checks = AuthChecks(self)
         self.rate_limit_checks = RateLimitChecks(self)
         self.enum_checks = EnumChecks(self)
@@ -56,7 +68,8 @@ class Scanner:
             print(f"  [+] {message}")
 
     def scan(self) -> ScanResult:
-        start_time = time.time()
+        """Execute full scan and return results."""
+        self._scan_start_time = time.time()
         print(f"[*] Starting scan on {self.target}")
 
         try:
@@ -78,11 +91,14 @@ class Scanner:
             self.log("Running JWT checks...")
             self.jwt_checks.run_all()
 
-        except Exception as e:
+        except KeyboardInterrupt:
+            print("\n[!] Scan interrupted by user")
+        except Exception as e:  # noqa: BLE001 - top-level scan error handler
             print(f"[!] Scan error: {e}")
         finally:
             self.client.close()
-            self.result.scan_duration = time.time() - start_time
+            if self._scan_start_time:
+                self.result.scan_duration = time.time() - self._scan_start_time
 
         print(f"[*] Scan completed in {self.result.scan_duration:.2f}s")
         print(f"[*] Found {self.result.summary.total()} issues "
@@ -95,25 +111,34 @@ class Scanner:
         return self.result
 
     def add_finding(self, finding: Finding):
+        """Add a finding and print summary."""
         self.result.add_finding(finding)
-        severity_color = {
+        severity_marker = {
             Severity.CRITICAL: "[CRITICAL]",
             Severity.HIGH: "[HIGH]",
             Severity.MEDIUM: "[MEDIUM]",
             Severity.LOW: "[LOW]",
             Severity.INFO: "[INFO]",
         }
-        print(f"  {severity_color.get(finding.severity, '')} {finding.id}: {finding.title}")
+        marker = severity_marker.get(finding.severity, "")
+        if self.verbose or finding.severity in (Severity.CRITICAL, Severity.HIGH):
+            print(f"  {marker} {finding.id}: {finding.title}")
 
     def get_full_url(self, endpoint: str) -> str:
         if endpoint.startswith("http"):
             return endpoint
         return urljoin(self.target + "/", endpoint.lstrip("/"))
 
-    def make_request(self, method: str, endpoint: str, **kwargs) -> Optional[Any]:
+    def make_request(self, method: str, endpoint: str, **kwargs) -> Any | None:
+        """Make HTTP request with error handling."""
         url = self.get_full_url(endpoint)
         try:
             return getattr(self.client, method.lower())(url, **kwargs)
         except HTTPClientError as e:
             self.log(f"Request failed for {url}: {e}")
             return None
+
+    def get_relevant_endpoints(self, category: str) -> list[str]:
+        """Get endpoints relevant to a check category."""
+        # Override in subclasses or checks as needed
+        return self.endpoints
