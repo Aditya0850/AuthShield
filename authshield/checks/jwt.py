@@ -47,7 +47,7 @@ class JWTChecks:
         # Check Authorization header on authenticated endpoints (if cookies provided)
         for endpoint in ["/api/user", "/api/profile", "/api/me", "/dashboard"]:
             resp = self.scanner.make_request("GET", endpoint)
-            if resp and hasattr(resp, 'request') and resp.request:
+            if resp is not None and hasattr(resp, 'request') and resp.request:
                 auth_header = resp.request.headers.get("Authorization", "")
                 if auth_header.startswith("Bearer "):
                     token = auth_header[7:]
@@ -57,7 +57,7 @@ class JWTChecks:
         # Check response bodies for embedded tokens (login pages, etc.)
         for endpoint in ["/login", "/api/auth/login", "/"]:
             resp = self.scanner.make_request("GET", endpoint)
-            if resp:
+            if resp is not None:
                 import re
                 jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
                 matches = re.findall(jwt_pattern, resp.text)
@@ -105,7 +105,7 @@ class JWTChecks:
 
         for endpoint in jwks_endpoints:
             resp = self.scanner.make_request("GET", endpoint)
-            if resp and resp.status_code == 200:
+            if resp is not None and resp.status_code == 200:
                 try:
                     self.jwks_cache = resp.json()
                     return self.jwks_cache
@@ -224,14 +224,26 @@ class JWTChecks:
         # Active test: send 'none' token to a protected endpoint
         # Only if we have a protected endpoint to test against
         protected_endpoints = ["/api/user", "/api/profile", "/api/me"]
+
         for endpoint in protected_endpoints:
             # First check if endpoint requires auth
             resp = self.scanner.make_request("GET", endpoint)
-            if resp and resp.status_code in (401, 403):
-                # Craft a 'none' algorithm token
+            if resp is not None and resp.status_code in (401, 403):
+                # Extract username from an existing valid token if available
+                test_username = self._extract_username_from_token(token)
+
+                # If no valid token has a username, try to register a test user
+                if not test_username:
+                    test_username = self._register_test_user()
+
+                if not test_username:
+                    self.scanner.log(f"Could not determine test username for JWT-004 on {endpoint}")
+                    continue
+
+                # Craft a 'none' algorithm token with the test username
                 try:
                     none_header = {"alg": "none", "typ": "JWT"}
-                    none_payload = {"sub": "test", "iat": 1234567890, "test": True}
+                    none_payload = {"sub": test_username, "iat": 1234567890}
                     header_b64 = base64.urlsafe_b64encode(json.dumps(none_header).encode()).decode().rstrip("=")
                     payload_b64 = base64.urlsafe_b64encode(json.dumps(none_payload).encode()).decode().rstrip("=")
                     none_token = f"{header_b64}.{payload_b64}."
@@ -240,7 +252,7 @@ class JWTChecks:
                     test_resp = self.scanner.make_request("GET", endpoint, headers={
                         "Authorization": f"Bearer {none_token}"
                     })
-                    if test_resp and test_resp.status_code == 200:
+                    if test_resp is not None and test_resp.status_code == 200:
                         self.scanner.add_finding(make_finding(
                             check_id="JWT-004",
                             title="Endpoint Accepts 'none' Algorithm JWT",
@@ -252,5 +264,52 @@ class JWTChecks:
                             raw_data={"endpoint": endpoint, "algorithm": "none"},
                         ))
                         return
+                    elif test_resp is not None and test_resp.status_code != 401:
+                        # Some other response (e.g., 404 user not found) means the algorithm was accepted
+                        # but authorization failed for other reasons - still a vulnerability
+                        self.scanner.add_finding(make_finding(
+                            check_id="JWT-004",
+                            title="Endpoint Accepts 'none' Algorithm JWT (Algorithm Not Rejected)",
+                            severity=Severity.HIGH,
+                            category=Category.JWT,
+                            evidence_desc=(
+                                f"Endpoint {endpoint} did not reject 'alg=none' token (status: {test_resp.status_code}). "
+                                f"The 'none' algorithm was processed by the JWT library. "
+                                f"Only user validation failed afterward."
+                            ),
+                            fix="Configure JWT library to reject 'none' algorithm. Require signature verification.",
+                            references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
+                            raw_data={"endpoint": endpoint, "algorithm": "none", "response_status": test_resp.status_code},
+                        ))
+                        return
                 except (ValueError, TypeError, json.JSONDecodeError):
                     pass
+
+    def _extract_username_from_token(self, token: str) -> str | None:
+        """Extract username/sub from a valid token if available."""
+        try:
+            payload = self._decode_payload(token)
+            if payload and "sub" in payload:
+                return str(payload["sub"])
+        except (ValueError, KeyError, TypeError):
+            pass
+        return None
+
+    def _register_test_user(self) -> str | None:
+        """Try to register a test user and return the username."""
+        import time
+        test_user = f"jwt_test_{int(time.time())}"
+        for endpoint in ["/register", "/signup", "/auth/register", "/api/register"]:
+            resp = self.scanner.make_request("POST", endpoint, json={
+                "username": test_user, "password": "TestPass123!"
+            })
+            if resp and resp.status_code in (200, 201):
+                return test_user
+            # Try form-encoded fallback
+            if resp and resp.status_code == 415:
+                resp = self.scanner.make_request("POST", endpoint, data={
+                    "username": test_user, "password": "TestPass123!"
+                })
+                if resp and resp.status_code in (200, 201):
+                    return test_user
+        return None
