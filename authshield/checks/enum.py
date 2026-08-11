@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -40,15 +41,21 @@ class EnumChecks:
         Methodology:
         - Submits same wrong password for multiple usernames
         - Compares HTTP status codes AND error message content
-        - Reports only if DIFFERENT responses for valid vs invalid users
+        - Reports if DIFFERENT responses for valid vs invalid users
+        - Also detects when error messages REFLECT the username back (enumeration vector)
         """
         responses = {}
 
         for username in self.TEST_USERNAMES:
-            resp = self.scanner.make_request("POST", "/login", data={
+            resp = self.scanner.make_request("POST", "/login", json={
                 "username": username, "password": "wrongpassword123"
             })
-            if not resp:
+            # If 415, try form-encoded
+            if resp is not None and resp.status_code == 415:
+                resp = self.scanner.make_request("POST", "/login", data={
+                    "username": username, "password": "wrongpassword123"
+                })
+            if resp is None:
                 return  # Network issue - abort cleanly
 
             responses[username] = {
@@ -60,15 +67,13 @@ class EnumChecks:
         if len(responses) < 2:
             return
 
-        # Extract error signature from each response
+        # Check 1: Different status codes or error signatures for different users
         signatures = {}
         for user, data in responses.items():
             content = data["content"].lower()
-            # Create a signature: status + normalized error message
             error_sig = self._extract_error_signature(content, data["status"])
             signatures[user] = error_sig
 
-        # Check if known-invalid user has different signature than potential valid users
         invalid_sig = signatures.get("nonexistentuser12345")
         if not invalid_sig:
             return
@@ -97,12 +102,39 @@ class EnumChecks:
                 ))
                 return
 
+        # Check 2: Error messages REFLECT the username back (enumeration via reflection)
+        # Even if status codes match, if the error message includes the submitted username,
+        # that's an enumeration vector
+        for user, data in responses.items():
+            if user == "nonexistentuser12345":
+                continue
+            content = data["content"].lower()
+            # Check if the username appears in the error message
+            if user.lower() in content and "not found" in content:
+                # Found reflection: error message says "User not found: {username}"
+                self.scanner.add_finding(make_finding(
+                    check_id="ENUM-001",
+                    title="Username Enumeration via Error Message Reflection",
+                    severity=Severity.MEDIUM,
+                    category=Category.USER_ENUMERATION,
+                    evidence_desc=(
+                        f"Error message for failed login reflects the submitted username: "
+                        f"'{user}' appears in response. This allows username enumeration."
+                    ),
+                    fix=(
+                        "Use identical generic error messages for all failed login attempts. "
+                        "Never include the submitted username in error responses."
+                    ),
+                    references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
+                    raw_data={"reflected_username": user, "methodology": "username reflection in error message"},
+                ))
+                return
+
     def _extract_error_signature(self, content: str, status: int) -> str:
         """Normalize error response into a comparable signature."""
         # Extract the core error message
         error_msg = "no_error"
         if "invalid" in content or "incorrect" in content or "wrong" in content:
-            import re
             match = re.search(r'(invalid|incorrect|wrong)[^.]*?(username|user|email|password|credential)', content)
             if match:
                 # Normalize: replace specifics with placeholders
@@ -114,4 +146,7 @@ class EnumChecks:
             error_msg = "rate_limit"
         elif "captcha" in content:
             error_msg = "captcha"
+        elif "not found" in content:
+            # Normalize "user not found: <username>" to just "user not found"
+            error_msg = "user_not_found"
         return f"{status}:{error_msg}"
