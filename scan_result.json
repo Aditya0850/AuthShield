@@ -1,0 +1,147 @@
+{
+  "target": "http://127.0.0.1:5000",
+  "scan_time": "2026-08-11T11:08:40.508106Z",
+  "scan_duration": 0.31,
+  "summary": {
+    "critical": 0,
+    "high": 5,
+    "medium": 1,
+    "low": 0,
+    "info": 0,
+    "total": 6
+  },
+  "findings": [
+    {
+      "id": "AUTH-001",
+      "title": "Weak Password Policy Indicator",
+      "severity": "MEDIUM",
+      "category": "authentication",
+      "evidence": {
+        "description": "Registration page /register contains weak password requirement: at least X characters where X <= 5",
+        "raw_data": {
+          "endpoint": "/register",
+          "pattern": "at\\s+least\\s+[0-5]\\s*(character|char)",
+          "description": "at least X characters where X <= 5"
+        },
+        "request": null,
+        "response": "{\n  \"message\": \"registration page\",\n  \"requirements\": \"password must be at least 4 characters\"\n}\n"
+      },
+      "fix": "Enforce minimum 12-character passwords with complexity requirements. Show real-time strength meter. Reject common passwords.",
+      "references": [
+        "https://owasp.org/www-project-authentication-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-001",
+      "title": "Missing Secure Flag on Session Cookie",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' missing Secure flag - transmitted over HTTP",
+        "raw_data": {
+          "cookie_name": "session",
+          "cookie_value": "insecure-session-val..."
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set Secure flag on all session cookies. Ensure site uses HTTPS only.",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-002",
+      "title": "Missing HttpOnly Flag on Session Cookie",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' missing HttpOnly flag - accessible via JavaScript",
+        "raw_data": {
+          "cookie_name": "session",
+          "cookie_value": "insecure-session-val..."
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set HttpOnly flag on all session cookies to prevent XSS theft",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-003",
+      "title": "Missing or Insecure SameSite Attribute",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' has SameSite=None (missing)",
+        "raw_data": {
+          "cookie_name": "session",
+          "samesite": null
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set SameSite=Strict or SameSite=Lax on session cookies. Use SameSite=None only with Secure for cross-site requests.",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "CORS-001",
+      "title": "CORS Reflects Arbitrary Origin with Credentials",
+      "severity": "HIGH",
+      "category": "cors_headers",
+      "evidence": {
+        "description": "Endpoint /api/ reflects attacker origin 'https://evil.com' with credentials",
+        "raw_data": {
+          "endpoint": "/api/",
+          "origin": "https://evil.com",
+          "acao": "https://evil.com",
+          "acac": "true"
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Validate Origin header against whitelist. Don't dynamically reflect Origin header.",
+      "references": [
+        "https://owasp.org/www-project-cors-security-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "CORS-002",
+      "title": "Missing or Weak Security Headers",
+      "severity": "HIGH",
+      "category": "cors_headers",
+      "evidence": {
+        "description": "Missing headers: Content-Security-Policy, Strict-Transport-Security (HSTS), X-Frame-Options, X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy. Issues: None",
+        "raw_data": {
+          "missing": [
+            "Content-Security-Policy",
+            "Strict-Transport-Security (HSTS)",
+            "X-Frame-Options",
+            "X-Content-Type-Options (nosniff)",
+            "Referrer-Policy",
+            "Permissions-Policy",
+            "Cross-Origin-Opener-Policy",
+            "Cross-Origin-Resource-Policy"
+          ],
+          "issues": []
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Implement all security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP",
+      "references": [
+        "https://owasp.org/www-project-secure-headers-project/"
+      ],
+      "cvss_score": null
+    }
+  ]
+}

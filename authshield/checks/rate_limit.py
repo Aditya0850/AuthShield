@@ -44,10 +44,16 @@ class RateLimitChecks:
 
             # Send limited rapid requests
             for i in range(self.MAX_TEST_REQUESTS):
-                resp = self.scanner.make_request("POST", endpoint, data={
+                # Try JSON first (modern APIs), fall back to form data
+                resp = self.scanner.make_request("POST", endpoint, json={
                     "username": f"ratetest{i}", "password": "wrongpassword"
                 })
-                if resp:
+                # If 415 (Unsupported Media Type), try form-encoded
+                if resp is not None and resp.status_code == 415:
+                    resp = self.scanner.make_request("POST", endpoint, data={
+                        "username": f"ratetest{i}", "password": "wrongpassword"
+                    })
+                if resp is not None:
                     responses.append({
                         "attempt": i + 1,
                         "status": resp.status_code,
@@ -66,7 +72,9 @@ class RateLimitChecks:
             if not blocked:
                 # No rate limiting detected after 5 attempts
                 statuses = [r["status"] for r in responses if isinstance(r["status"], int)]
-                all_ok = all(s in (200, 400, 401, 403) for s in statuses)
+                # Accept 401, 400, 403, 415, 422 as "valid responses" (not server errors)
+                valid_statuses = (200, 201, 400, 401, 403, 415, 422)
+                all_ok = all(s in valid_statuses for s in statuses)
 
                 if all_ok and len(statuses) == self.MAX_TEST_REQUESTS:
                     self.scanner.add_finding(make_finding(
@@ -86,7 +94,7 @@ class RateLimitChecks:
                         references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
                         raw_data={
                             "endpoint": endpoint,
-                            "methodology": f"{self.MAX_TEST_REQUESTS} rapid POST requests",
+                            "methodology": f"{self.MAX_TEST_REQUESTS} rapid POST requests (JSON + form fallback)",
                             "responses": responses,
                         },
                     ))

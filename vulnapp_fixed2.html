@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthShield Security Audit Report - http://localhost:5000</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: #f8fafc;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3rem 2rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+        }
+        h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .meta { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; opacity: 0.9; }
+        .meta-item { display: flex; align-items: center; gap: 0.5rem; }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid;
+        }
+        .stat-card.critical { border-color: #dc2626; }
+        .stat-card.high { border-color: #ea580c; }
+        .stat-card.medium { border-color: #d97706; }
+        .stat-card.low { border-color: #65a30d; }
+        .stat-card.info { border-color: #2563eb; }
+        .stat-value { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+        .stat-label { font-size: 0.875rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card.critical .stat-value { color: #dc2626; }
+        .stat-card.high .stat-value { color: #ea580c; }
+        .stat-card.medium .stat-value { color: #d97706; }
+        .stat-card.low .stat-value { color: #65a30d; }
+        .stat-card.info .stat-value { color: #2563eb; }
+
+        .section { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .section-header {
+            padding: 1.25rem 1.5rem;
+            font-weight: 600;
+            font-size: 1.125rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .section-header.critical { background: #fef2f2; color: #dc2626; border-bottom: 1px solid #fecaca; }
+        .section-header.high { background: #fff7ed; color: #ea580c; border-bottom: 1px solid #fed7aa; }
+        .section-header.medium { background: #fffbeb; color: #d97706; border-bottom: 1px solid #fde68a; }
+        .section-header.low { background: #f7fef0; color: #65a30d; border-bottom: 1px solid #d9f99d; }
+        .section-header.info { background: #eff6ff; color: #2563eb; border-bottom: 1px solid #bfdbfe; }
+        .section-header.none { background: #f8fafc; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge.critical { background: #fee2e2; color: #dc2626; }
+        .badge.high { background: #ffedd5; color: #ea580c; }
+        .badge.medium { background: #fef3c7; color: #d97706; }
+        .badge.low { background: #dcfce7; color: #65a30d; }
+        .badge.info { background: #dbeafe; color: #2563eb; }
+
+        .finding { padding: 1.5rem; border-top: 1px solid #e2e8f0; }
+        .finding:first-child { border-top: none; }
+        .finding-header { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; }
+        .finding-title { font-size: 1.125rem; font-weight: 600; color: #1e293b; }
+        .finding-id { color: #64748b; font-family: monospace; font-size: 0.875rem; }
+        .finding-evidence { background: #f8fafc; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.875rem; color: #334155; white-space: pre-wrap; overflow-x: auto; }
+        .finding-fix { background: #f0fdf4; border-left: 3px solid #22c55e; padding: 1rem; border-radius: 0 8px 8px 0; }
+        .finding-fix-title { font-weight: 600; color: #166534; margin-bottom: 0.5rem; }
+        .finding-fix-text { color: #166534; }
+        .finding-refs { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
+        .finding-ref { color: #2563eb; text-decoration: none; font-size: 0.875rem; }
+        .finding-ref:hover { text-decoration: underline; }
+
+        .category-section { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .category-header { background: #f1f5f9; padding: 1rem 1.5rem; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0; }
+        .category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; padding: 1.5rem; }
+        .category-card { background: #f8fafc; border-radius: 8px; padding: 1rem; }
+        .category-card-title { font-weight: 600; color: #1e293b; margin-bottom: 0.5rem; }
+        .category-link { color: #667eea; text-decoration: none; font-size: 0.875rem; }
+        .category-link:hover { text-decoration: underline; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #64748b; }
+        .empty-state svg { width: 64px; height: 64px; margin-bottom: 1rem; opacity: 0.5; }
+        footer { text-align: center; padding: 2rem; color: #64748b; font-size: 0.875rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ AuthShield Security Audit Report</h1>
+            <div class="meta">
+                <div class="meta-item"><strong>Target:</strong> http://localhost:5000</div>
+                <div class="meta-item"><strong>Scan Time:</strong> 2026-08-11 12:59 UTC</div>
+                <div class="meta-item"><strong>Duration:</strong> 82.59s</div>
+                <div class="meta-item"><strong>Total Findings:</strong> 9</div>
+            </div>
+        </header>
+
+        <div class="summary-grid">
+            <div class="stat-card critical">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Critical</div>
+            </div>
+            <div class="stat-card high">
+                <div class="stat-value">7</div>
+                <div class="stat-label">High</div>
+            </div>
+            <div class="stat-card medium">
+                <div class="stat-value">2</div>
+                <div class="stat-label">Medium</div>
+            </div>
+            <div class="stat-card low">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Low</div>
+            </div>
+            <div class="stat-card info">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Info</div>
+            </div>
+        </div>
+
+        
+        
+        
+        <div class="section">
+            <div class="section-header none">
+                CRITICAL Severity Findings (0)
+                <span class="badge" style="background:#e2e8f0;color:#64748b;">CRITICAL</span>
+            </div>
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <p>No critical severity findings detected.</p>
+            </div>
+        </div>
+        
+        
+        
+        
+        <div class="section">
+            <div class="section-header high">
+                HIGH Severity Findings (7)
+                <span class="badge high">HIGH</span>
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">RATE-001</span>
+                    <span class="finding-title">Missing Rate Limiting on Authentication Endpoint</span>
+                    <span class="badge rate_limiting">Rate Limiting</span>
+                </div>
+                <div class="finding-evidence">Endpoint /login accepted 5 rapid failed login attempts without returning 429. Status codes: [401, 401, 401, 401, 401]
+                    {
+  "endpoint": "/login",
+  "methodology": "5 rapid POST requests (JSON + form fallback)",
+  "responses": [
+    {
+      "attempt": 1,
+      "status": 401
+    },
+    {
+      "attempt": 2,
+      "status": 401
+    },
+    {
+      "attempt": 3,
+      "status": 401
+    },
+    {
+      "attempt": 4,
+      "status": 401
+    },
+    {
+      "attempt": 5,
+      "status": 401
+    }
+  ]
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Implement rate limiting: max 5 attempts per minute per IP/account. Return 429 with Retry-After header. Use exponential backoff.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-authentication-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-authentication-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">RATE-001</span>
+                    <span class="finding-title">Missing Rate Limiting on Authentication Endpoint</span>
+                    <span class="badge rate_limiting">Rate Limiting</span>
+                </div>
+                <div class="finding-evidence">Endpoint /register accepted 5 rapid failed login attempts without returning 429. Status codes: [201, 201, 201, 201, 201]
+                    {
+  "endpoint": "/register",
+  "methodology": "5 rapid POST requests (JSON + form fallback)",
+  "responses": [
+    {
+      "attempt": 1,
+      "status": 201
+    },
+    {
+      "attempt": 2,
+      "status": 201
+    },
+    {
+      "attempt": 3,
+      "status": 201
+    },
+    {
+      "attempt": 4,
+      "status": 201
+    },
+    {
+      "attempt": 5,
+      "status": 201
+    }
+  ]
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Implement rate limiting: max 5 attempts per minute per IP/account. Return 429 with Retry-After header. Use exponential backoff.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-authentication-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-authentication-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">COOKIE-001</span>
+                    <span class="finding-title">Missing Secure Flag on Session Cookie</span>
+                    <span class="badge session">Session</span>
+                </div>
+                <div class="finding-evidence">Session cookie 'session' missing Secure flag - transmitted over HTTP
+                    {
+  "cookie_name": "session",
+  "cookie_value": "insecure-session-val..."
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Set Secure flag on all session cookies. Ensure site uses HTTPS only.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-session-management-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-session-management-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">COOKIE-002</span>
+                    <span class="finding-title">Missing HttpOnly Flag on Session Cookie</span>
+                    <span class="badge session">Session</span>
+                </div>
+                <div class="finding-evidence">Session cookie 'session' missing HttpOnly flag - accessible via JavaScript
+                    {
+  "cookie_name": "session",
+  "cookie_value": "insecure-session-val..."
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Set HttpOnly flag on all session cookies to prevent XSS theft</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-session-management-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-session-management-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">COOKIE-003</span>
+                    <span class="finding-title">Missing or Insecure SameSite Attribute</span>
+                    <span class="badge session">Session</span>
+                </div>
+                <div class="finding-evidence">Session cookie 'session' has SameSite=None (missing)
+                    {
+  "cookie_name": "session",
+  "samesite": null
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Set SameSite=Strict or SameSite=Lax on session cookies. Use SameSite=None only with Secure for cross-site requests.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-session-management-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-session-management-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">CORS-001</span>
+                    <span class="finding-title">CORS Reflects Arbitrary Origin with Credentials</span>
+                    <span class="badge cors_headers">Cors Headers</span>
+                </div>
+                <div class="finding-evidence">Endpoint /api/ reflects attacker origin 'https://evil.com' with credentials
+                    {
+  "acac": "true",
+  "acao": "https://evil.com",
+  "endpoint": "/api/",
+  "origin": "https://evil.com"
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Validate Origin header against whitelist. Don't dynamically reflect Origin header.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-cors-security-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-cors-security-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">CORS-002</span>
+                    <span class="finding-title">Missing or Weak Security Headers</span>
+                    <span class="badge cors_headers">Cors Headers</span>
+                </div>
+                <div class="finding-evidence">Missing headers: Content-Security-Policy, Strict-Transport-Security (HSTS), X-Frame-Options, X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy. Issues: None
+                    {
+  "issues": [],
+  "missing": [
+    "Content-Security-Policy",
+    "Strict-Transport-Security (HSTS)",
+    "X-Frame-Options",
+    "X-Content-Type-Options (nosniff)",
+    "Referrer-Policy",
+    "Permissions-Policy",
+    "Cross-Origin-Opener-Policy",
+    "Cross-Origin-Resource-Policy"
+  ]
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Implement all security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-secure-headers-project/" target="_blank" class="finding-ref">https://owasp.org/www-project-secure-headers-project/</a>
+                    
+                </div>
+                
+            </div>
+            
+        </div>
+        
+        
+        
+        
+        <div class="section">
+            <div class="section-header medium">
+                MEDIUM Severity Findings (2)
+                <span class="badge medium">MEDIUM</span>
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">AUTH-001</span>
+                    <span class="finding-title">Weak Password Policy Indicator</span>
+                    <span class="badge authentication">Authentication</span>
+                </div>
+                <div class="finding-evidence">Registration page /register contains weak password requirement: at least X characters where X <= 5
+                    {
+  "description": "at least X characters where X \u003c= 5",
+  "endpoint": "/register",
+  "pattern": "at\\s+least\\s+[0-5]\\s*(character|char)"
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Enforce minimum 12-character passwords with complexity requirements. Show real-time strength meter. Reject common passwords.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-authentication-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-authentication-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <span class="finding-id">ENUM-001</span>
+                    <span class="finding-title">Username Enumeration via Error Message Reflection</span>
+                    <span class="badge user_enumeration">User Enumeration</span>
+                </div>
+                <div class="finding-evidence">Error message for failed login reflects the submitted username: 'admin' appears in response. This allows username enumeration.
+                    {
+  "methodology": "username reflection in error message",
+  "reflected_username": "admin"
+}</div>
+                <div class="finding-fix">
+                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-text">Use identical generic error messages for all failed login attempts. Never include the submitted username in error responses.</div>
+                </div>
+                
+                <div class="finding-refs">
+                    <strong>References:</strong>
+                    
+                    <a href="https://owasp.org/www-project-authentication-cheat-sheet/" target="_blank" class="finding-ref">https://owasp.org/www-project-authentication-cheat-sheet/</a>
+                    
+                </div>
+                
+            </div>
+            
+        </div>
+        
+        
+        
+        
+        <div class="section">
+            <div class="section-header none">
+                LOW Severity Findings (0)
+                <span class="badge" style="background:#e2e8f0;color:#64748b;">LOW</span>
+            </div>
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <p>No low severity findings detected.</p>
+            </div>
+        </div>
+        
+        
+        
+        
+        <div class="section">
+            <div class="section-header none">
+                INFO Severity Findings (0)
+                <span class="badge" style="background:#e2e8f0;color:#64748b;">INFO</span>
+            </div>
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <p>No info severity findings detected.</p>
+            </div>
+        </div>
+        
+        
+
+        <h2 style="margin: 2rem 0 1rem; color: #1e293b;">Findings by Category</h2>
+        
+        <div class="category-section">
+            <div class="category-header">Authentication (1 findings)</div>
+            <div class="category-grid">
+                
+                <div class="category-card">
+                    <div class="category-card-title">AUTH-001: Weak Password Policy Indicator</div>
+                    <span class="badge medium">MEDIUM</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Registration page /register contains weak password requirement: at least X characters where X <= 5...</div>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="category-section">
+            <div class="category-header">Rate Limiting (2 findings)</div>
+            <div class="category-grid">
+                
+                <div class="category-card">
+                    <div class="category-card-title">RATE-001: Missing Rate Limiting on Authentication Endpoint</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Endpoint /login accepted 5 rapid failed login attempts without returning 429. Status codes: [401, 40...</div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-card-title">RATE-001: Missing Rate Limiting on Authentication Endpoint</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Endpoint /register accepted 5 rapid failed login attempts without returning 429. Status codes: [201,...</div>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="category-section">
+            <div class="category-header">User Enumeration (1 findings)</div>
+            <div class="category-grid">
+                
+                <div class="category-card">
+                    <div class="category-card-title">ENUM-001: Username Enumeration via Error Message Reflection</div>
+                    <span class="badge medium">MEDIUM</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Error message for failed login reflects the submitted username: 'admin' appears in response. This al...</div>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="category-section">
+            <div class="category-header">Session (3 findings)</div>
+            <div class="category-grid">
+                
+                <div class="category-card">
+                    <div class="category-card-title">COOKIE-001: Missing Secure Flag on Session Cookie</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Session cookie 'session' missing Secure flag - transmitted over HTTP...</div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-card-title">COOKIE-002: Missing HttpOnly Flag on Session Cookie</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Session cookie 'session' missing HttpOnly flag - accessible via JavaScript...</div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-card-title">COOKIE-003: Missing or Insecure SameSite Attribute</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Session cookie 'session' has SameSite=None (missing)...</div>
+                </div>
+                
+            </div>
+        </div>
+        
+        <div class="category-section">
+            <div class="category-header">Cors Headers (2 findings)</div>
+            <div class="category-grid">
+                
+                <div class="category-card">
+                    <div class="category-card-title">CORS-001: CORS Reflects Arbitrary Origin with Credentials</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Endpoint /api/ reflects attacker origin 'https://evil.com' with credentials...</div>
+                </div>
+                
+                <div class="category-card">
+                    <div class="category-card-title">CORS-002: Missing or Weak Security Headers</div>
+                    <span class="badge high">HIGH</span>
+                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">Missing headers: Content-Security-Policy, Strict-Transport-Security (HSTS), X-Frame-Options, X-Conte...</div>
+                </div>
+                
+            </div>
+        </div>
+        
+
+        <footer>
+            Generated by <strong>AuthShield</strong> v0.1.0 — Web Authentication Security Auditor<br>
+            <a href="https://github.com/Aditya0850/AuthShield" target="_blank" style="color: #667eea;">github.com/Aditya0850/AuthShield</a>
+        </footer>
+    </div>
+</body>
+</html>

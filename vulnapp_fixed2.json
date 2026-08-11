@@ -1,0 +1,251 @@
+{
+  "target": "http://localhost:5000",
+  "scan_time": "2026-08-11T12:59:05.947815Z",
+  "scan_duration": 82.59,
+  "summary": {
+    "critical": 0,
+    "high": 7,
+    "medium": 2,
+    "low": 0,
+    "info": 0,
+    "total": 9
+  },
+  "findings": [
+    {
+      "id": "AUTH-001",
+      "title": "Weak Password Policy Indicator",
+      "severity": "MEDIUM",
+      "category": "authentication",
+      "evidence": {
+        "description": "Registration page /register contains weak password requirement: at least X characters where X <= 5",
+        "raw_data": {
+          "endpoint": "/register",
+          "pattern": "at\\s+least\\s+[0-5]\\s*(character|char)",
+          "description": "at least X characters where X <= 5"
+        },
+        "request": null,
+        "response": "{\n  \"message\": \"registration page\",\n  \"requirements\": \"password must be at least 4 characters\"\n}\n"
+      },
+      "fix": "Enforce minimum 12-character passwords with complexity requirements. Show real-time strength meter. Reject common passwords.",
+      "references": [
+        "https://owasp.org/www-project-authentication-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "RATE-001",
+      "title": "Missing Rate Limiting on Authentication Endpoint",
+      "severity": "HIGH",
+      "category": "rate_limiting",
+      "evidence": {
+        "description": "Endpoint /login accepted 5 rapid failed login attempts without returning 429. Status codes: [401, 401, 401, 401, 401]",
+        "raw_data": {
+          "endpoint": "/login",
+          "methodology": "5 rapid POST requests (JSON + form fallback)",
+          "responses": [
+            {
+              "attempt": 1,
+              "status": 401
+            },
+            {
+              "attempt": 2,
+              "status": 401
+            },
+            {
+              "attempt": 3,
+              "status": 401
+            },
+            {
+              "attempt": 4,
+              "status": 401
+            },
+            {
+              "attempt": 5,
+              "status": 401
+            }
+          ]
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Implement rate limiting: max 5 attempts per minute per IP/account. Return 429 with Retry-After header. Use exponential backoff.",
+      "references": [
+        "https://owasp.org/www-project-authentication-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "RATE-001",
+      "title": "Missing Rate Limiting on Authentication Endpoint",
+      "severity": "HIGH",
+      "category": "rate_limiting",
+      "evidence": {
+        "description": "Endpoint /register accepted 5 rapid failed login attempts without returning 429. Status codes: [201, 201, 201, 201, 201]",
+        "raw_data": {
+          "endpoint": "/register",
+          "methodology": "5 rapid POST requests (JSON + form fallback)",
+          "responses": [
+            {
+              "attempt": 1,
+              "status": 201
+            },
+            {
+              "attempt": 2,
+              "status": 201
+            },
+            {
+              "attempt": 3,
+              "status": 201
+            },
+            {
+              "attempt": 4,
+              "status": 201
+            },
+            {
+              "attempt": 5,
+              "status": 201
+            }
+          ]
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Implement rate limiting: max 5 attempts per minute per IP/account. Return 429 with Retry-After header. Use exponential backoff.",
+      "references": [
+        "https://owasp.org/www-project-authentication-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "ENUM-001",
+      "title": "Username Enumeration via Error Message Reflection",
+      "severity": "MEDIUM",
+      "category": "user_enumeration",
+      "evidence": {
+        "description": "Error message for failed login reflects the submitted username: 'admin' appears in response. This allows username enumeration.",
+        "raw_data": {
+          "reflected_username": "admin",
+          "methodology": "username reflection in error message"
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Use identical generic error messages for all failed login attempts. Never include the submitted username in error responses.",
+      "references": [
+        "https://owasp.org/www-project-authentication-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-001",
+      "title": "Missing Secure Flag on Session Cookie",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' missing Secure flag - transmitted over HTTP",
+        "raw_data": {
+          "cookie_name": "session",
+          "cookie_value": "insecure-session-val..."
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set Secure flag on all session cookies. Ensure site uses HTTPS only.",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-002",
+      "title": "Missing HttpOnly Flag on Session Cookie",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' missing HttpOnly flag - accessible via JavaScript",
+        "raw_data": {
+          "cookie_name": "session",
+          "cookie_value": "insecure-session-val..."
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set HttpOnly flag on all session cookies to prevent XSS theft",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "COOKIE-003",
+      "title": "Missing or Insecure SameSite Attribute",
+      "severity": "HIGH",
+      "category": "session",
+      "evidence": {
+        "description": "Session cookie 'session' has SameSite=None (missing)",
+        "raw_data": {
+          "cookie_name": "session",
+          "samesite": null
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Set SameSite=Strict or SameSite=Lax on session cookies. Use SameSite=None only with Secure for cross-site requests.",
+      "references": [
+        "https://owasp.org/www-project-session-management-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "CORS-001",
+      "title": "CORS Reflects Arbitrary Origin with Credentials",
+      "severity": "HIGH",
+      "category": "cors_headers",
+      "evidence": {
+        "description": "Endpoint /api/ reflects attacker origin 'https://evil.com' with credentials",
+        "raw_data": {
+          "endpoint": "/api/",
+          "origin": "https://evil.com",
+          "acao": "https://evil.com",
+          "acac": "true"
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Validate Origin header against whitelist. Don't dynamically reflect Origin header.",
+      "references": [
+        "https://owasp.org/www-project-cors-security-cheat-sheet/"
+      ],
+      "cvss_score": null
+    },
+    {
+      "id": "CORS-002",
+      "title": "Missing or Weak Security Headers",
+      "severity": "HIGH",
+      "category": "cors_headers",
+      "evidence": {
+        "description": "Missing headers: Content-Security-Policy, Strict-Transport-Security (HSTS), X-Frame-Options, X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy. Issues: None",
+        "raw_data": {
+          "missing": [
+            "Content-Security-Policy",
+            "Strict-Transport-Security (HSTS)",
+            "X-Frame-Options",
+            "X-Content-Type-Options (nosniff)",
+            "Referrer-Policy",
+            "Permissions-Policy",
+            "Cross-Origin-Opener-Policy",
+            "Cross-Origin-Resource-Policy"
+          ],
+          "issues": []
+        },
+        "request": null,
+        "response": null
+      },
+      "fix": "Implement all security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP",
+      "references": [
+        "https://owasp.org/www-project-secure-headers-project/"
+      ],
+      "cvss_score": null
+    }
+  ]
+}
