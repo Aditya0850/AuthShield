@@ -9,7 +9,7 @@ AuthShield is a **passive-first** security scanner that audits web applications 
 
 ---
 
-## ��� Quick Start
+## Quick Start
 
 ```bash
 # Install
@@ -23,15 +23,18 @@ authshield scan http://example.com \
   -e "/login,/register,/api/auth" \
   -c "session=abc123" \
   -H "Authorization: Bearer token" \
+  --exclude-checks RATE-001,JWT-004 \
   -f both \
   -o my-report
 ```
 
+On an interactive terminal, the scan shows per-category progress (e.g. Authentication checks → JWT checks). Progress is suppressed when stdout is not a TTY (CI / piped output).
+
 ---
 
-## ��� Implemented Security Checks
+## Implemented Security Checks
 
-AuthShield implements **9 conservative checks** across 5 categories. Each check has a documented methodology and request budget.
+AuthShield implements **11 conservative checks** across 6 categories. Each check has a documented methodology and request budget.
 
 | Check ID | Title | Category | Severity | Methodology |
 |----------|-------|----------|----------|-------------|
@@ -60,7 +63,7 @@ AuthShield implements **9 conservative checks** across 5 categories. Each check 
 
 ---
 
-## ��� Output Formats
+## Output Formats
 
 ### JSON Report (`-f json` or `-f both`)
 Machine-readable structured output with findings, evidence, and remediation guidance.
@@ -90,7 +93,7 @@ Human-readable report grouped by severity and category with collapsible evidence
 
 ---
 
-## ��� Local Testing with VulnApp
+## Local Testing with VulnApp
 
 AuthShield includes a **deliberately vulnerable Flask application** (`vuln_app.py`) that demonstrates all detectable issues.
 
@@ -103,13 +106,16 @@ python vuln_app.py
 # Terminal 2: Run AuthShield scan
 authshield scan http://localhost:5000 -f both -o vulnapp-report
 
-# Expected findings (6 total):
+# Optional: skip noisy checks
+# authshield scan http://localhost:5000 --exclude-checks RATE-001 -f both
+
+# Expected findings (often 6+; RATE-001/ENUM-001 also common):
 # - 1 MEDIUM: AUTH-001 (weak password policy: min 4 chars)
 # - 3 HIGH:   COOKIE-001, COOKIE-002, COOKIE-003 (insecure session cookies)
 # - 2 HIGH:   CORS-001 (reflects arbitrary origin + credentials), CORS-002 (missing security headers)
 ```
 
-> ������ **WARNING**: `vuln_app.py` contains INTENTIONAL vulnerabilities. Never deploy to production. For local testing only.
+> **WARNING**: `vuln_app.py` contains INTENTIONAL vulnerabilities. Never deploy to production. For local testing only.
 
 ### VulnApp Endpoints
 
@@ -124,12 +130,12 @@ authshield scan http://localhost:5000 -f both -o vulnapp-report
 
 ---
 
-## ��� Design Principles
+## Design Principles
 
 ### Conservative by Default
 - **No brute force** — No credential stuffing, password spraying, or secret cracking
 - **No destructive actions** — Only GET/POST requests that mimic normal browser behavior
-- **Request budgets** — Default max 100 requests per scan; configurable via `--max-requests`
+- **Request budgets** — Default max 100 requests per scan (scanner `max_requests`)
 - **Passive-first** — 8 of 11 checks are purely passive observation
 
 ### Testable & Explainable
@@ -144,7 +150,7 @@ authshield scan http://localhost:5000 -f both -o vulnapp-report
 
 ---
 
-## ������ Configuration
+## Configuration
 
 ### CLI Options
 
@@ -162,9 +168,17 @@ Options:
   --no-ssl-verify         Disable SSL certificate verification
   -f, --format [json|html|both]  Output format (default: both)
   -o, --output TEXT       Output file path (without extension)
+  --exclude-checks TEXT   Comma-separated check IDs to skip (e.g. RATE-001,JWT-004)
   -v, --verbose           Verbose output
-  --max-requests INT      Maximum requests per scan (default: 100)
   --help                  Show this message and exit.
+```
+
+### Exclude Specific Checks
+Skip noisy or irrelevant checks by ID. Unknown IDs print a warning and are ignored; valid exclusions appear in the scan summary.
+
+```bash
+authshield scan http://example.com --exclude-checks RATE-001,COOKIE-002
+authshield checks   # list valid check IDs
 ```
 
 ### List All Checks
@@ -179,11 +193,11 @@ authshield quick http://example.com
 
 ---
 
-## ��� Development
+## Development
 
 ### Requirements
 - Python 3.10+
-- Dependencies: `click`, `httpx`, `pydantic`, `rich`, `jinja2`, `pyjwt`
+- Dependencies: `click`, `requests`, `pydantic`, `rich`, `jinja2`, `pyjwt`, `beautifulsoup4`
 
 ### Install in Development Mode
 ```bash
@@ -225,12 +239,12 @@ authshield/
 ├── reporting/
 │   ├── html_report.py     # Jinja2 HTML reporter
 │   └── json_report.py     # JSON reporter
-��── __init__.py
+└── __init__.py
 ```
 
 ---
 
-## ��� Limitations & Known Gaps
+## Limitations & Known Gaps
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
@@ -242,7 +256,7 @@ authshield/
 
 ---
 
-## ��� Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -259,10 +273,14 @@ authshield/
 
 ---
 
-## ��� Changelog
+## Changelog
+
+### Unreleased
+- `--exclude-checks` CLI flag to skip selected check IDs (#1)
+- Per-category scan progress indicator on interactive terminals (#2)
 
 ### v0.1.0 (2026-08-11)
-- Initial release with 9 checks across 5 categories
+- Initial release with 11 checks across 6 categories
 - JSON + HTML reporting
 - VulnApp for local testing
 - Full test suite (50+ tests)
@@ -270,17 +288,19 @@ authshield/
 
 ---
 
-## ��� License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## ������ Roadmap
+## Roadmap
 
-### v0.1 (current) — Passive Security Auditing
+### v0.1 (current) — Auth Security Auditing
 - Auth, sessions/cookies, CORS, JWT, security headers
 - JSON/HTML reports
+- `--exclude-checks` to skip selected check IDs
+- Per-category scan progress on interactive terminals
 
 ### v0.2 — Web Security Expansion
 - SQL injection detection
@@ -321,10 +341,10 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-AuthShield: **Web Application Security Auditor — From Passive Audit to Safe Validation**
+AuthShield: **Web Application Security Auditor — From Auth Audit to Safe Validation**
 
 ---
 
-## ������ Disclaimer
+## Disclaimer
 
 AuthShield is a **security auditing tool** for authorized testing only. The authors are not responsible for misuse. Always obtain explicit permission before scanning targets you do not own. The included `vuln_app.py` is for educational purposes only — never deploy to production.

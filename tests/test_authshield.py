@@ -857,5 +857,36 @@ class TestExcludeChecks:
         scanner.client.close()
 
 
+class TestScanProgress:
+    def test_progress_callback_invoked_per_category(self):
+        scanner = Scanner(target="https://example.com", verbose=False)
+        scanner.auth_checks = Mock()
+        scanner.rate_limit_checks = Mock()
+        scanner.enum_checks = Mock()
+        scanner.cookie_checks = Mock()
+        scanner.cors_checks = Mock()
+        scanner.jwt_checks = Mock()
+
+        calls = []
+        scanner.scan(progress_callback=lambda label, i, total: calls.append((label, i, total)))
+
+        assert len(calls) == 6
+        assert calls[0] == ("Authentication checks", 1, 6)
+        assert calls[-1] == ("JWT checks", 6, 6)
+        assert all(total == 6 for _, _, total in calls)
+
+    def test_scan_works_without_progress_callback(self):
+        scanner = Scanner(target="https://example.com", verbose=False)
+        scanner.auth_checks = Mock()
+        scanner.rate_limit_checks = Mock()
+        scanner.enum_checks = Mock()
+        scanner.cookie_checks = Mock()
+        scanner.cors_checks = Mock()
+        scanner.jwt_checks = Mock()
+
+        result = scanner.scan()
+        assert result is scanner.result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
