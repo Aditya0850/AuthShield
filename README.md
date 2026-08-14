@@ -89,7 +89,7 @@ Machine-readable structured output with findings, evidence, and remediation guid
 ```
 
 ### HTML Report (`-f html` or `-f both`)
-Human-readable report grouped by severity and category with collapsible evidence details.
+Human-readable report grouped by severity and category. Includes interactive severity/category filters and a dark/light mode toggle (persisted via localStorage) — pure JS/CSS, renders as a static file with no server required.
 
 ---
 
@@ -278,6 +278,7 @@ authshield/
 ### Unreleased
 - `--exclude-checks` CLI flag to skip selected check IDs (#1)
 - Per-category scan progress indicator on interactive terminals (#2)
+- HTML report: severity/category filtering and dark mode toggle (#3)
 
 ### v0.1.0 (2026-08-11)
 - Initial release with 11 checks across 6 categories

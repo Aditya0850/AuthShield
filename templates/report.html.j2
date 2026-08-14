@@ -5,12 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AuthShield Security Audit Report - {{ result.target }}</title>
     <style>
+        :root {
+            --bg: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-muted: #f8fafc;
+            --bg-header-none: #f8fafc;
+            --text: #1a1a2e;
+            --text-strong: #1e293b;
+            --text-muted: #64748b;
+            --text-evidence: #334155;
+            --border: #e2e8f0;
+            --shadow: 0 2px 10px rgba(0,0,0,0.05);
+            --critical-bg: #fef2f2; --critical-fg: #dc2626; --critical-border: #fecaca;
+            --high-bg: #fff7ed;     --high-fg: #ea580c;     --high-border: #fed7aa;
+            --medium-bg: #fffbeb;   --medium-fg: #d97706;   --medium-border: #fde68a;
+            --low-bg: #f7fef0;      --low-fg: #65a30d;      --low-border: #d9f99d;
+            --info-bg: #eff6ff;     --info-fg: #2563eb;     --info-border: #bfdbfe;
+            --fix-bg: #f0fdf4; --fix-fg: #166534; --fix-border: #22c55e;
+            --link: #2563eb;
+            --accent: #667eea;
+        }
+        html[data-theme="dark"] {
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-muted: #0f172a;
+            --bg-header-none: #1e293b;
+            --text: #e2e8f0;
+            --text-strong: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-evidence: #cbd5e1;
+            --border: #334155;
+            --shadow: 0 2px 10px rgba(0,0,0,0.4);
+            --critical-bg: rgba(220, 38, 38, 0.15);  --critical-fg: #f87171; --critical-border: rgba(220, 38, 38, 0.35);
+            --high-bg: rgba(234, 88, 12, 0.15);      --high-fg: #fb923c;     --high-border: rgba(234, 88, 12, 0.35);
+            --medium-bg: rgba(217, 119, 6, 0.15);    --medium-fg: #fbbf24;   --medium-border: rgba(217, 119, 6, 0.35);
+            --low-bg: rgba(101, 163, 13, 0.15);      --low-fg: #a3e635;      --low-border: rgba(101, 163, 13, 0.35);
+            --info-bg: rgba(37, 99, 235, 0.15);      --info-fg: #60a5fa;     --info-border: rgba(37, 99, 235, 0.35);
+            --fix-bg: rgba(34, 197, 94, 0.12); --fix-fg: #86efac; --fix-border: #22c55e;
+            --link: #60a5fa;
+            --accent: #818cf8;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             line-height: 1.6;
-            color: #1a1a2e;
-            background: #f8fafc;
+            color: var(--text);
+            background: var(--bg);
+            transition: background 0.2s, color 0.2s;
         }
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         header {
@@ -20,10 +61,25 @@
             border-radius: 16px;
             margin-bottom: 2rem;
             box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+            position: relative;
         }
         h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; }
         .meta { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; opacity: 0.9; }
         .meta-item { display: flex; align-items: center; gap: 0.5rem; }
+        .theme-toggle {
+            position: absolute;
+            top: 1.25rem;
+            right: 1.25rem;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 9999px;
+            padding: 0.4rem 1rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        .theme-toggle:hover { background: rgba(255,255,255,0.3); }
+
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -31,27 +87,59 @@
             margin-bottom: 2rem;
         }
         .stat-card {
-            background: white;
+            background: var(--bg-card);
             border-radius: 12px;
             padding: 1.5rem;
             text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow);
             border-left: 4px solid;
         }
-        .stat-card.critical { border-color: #dc2626; }
-        .stat-card.high { border-color: #ea580c; }
-        .stat-card.medium { border-color: #d97706; }
-        .stat-card.low { border-color: #65a30d; }
-        .stat-card.info { border-color: #2563eb; }
+        .stat-card.critical { border-color: var(--critical-fg); }
+        .stat-card.high { border-color: var(--high-fg); }
+        .stat-card.medium { border-color: var(--medium-fg); }
+        .stat-card.low { border-color: var(--low-fg); }
+        .stat-card.info { border-color: var(--info-fg); }
         .stat-value { font-size: 2.5rem; font-weight: 700; line-height: 1; }
-        .stat-label { font-size: 0.875rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-        .stat-card.critical .stat-value { color: #dc2626; }
-        .stat-card.high .stat-value { color: #ea580c; }
-        .stat-card.medium .stat-value { color: #d97706; }
-        .stat-card.low .stat-value { color: #65a30d; }
-        .stat-card.info .stat-value { color: #2563eb; }
+        .stat-label { font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card.critical .stat-value { color: var(--critical-fg); }
+        .stat-card.high .stat-value { color: var(--high-fg); }
+        .stat-card.medium .stat-value { color: var(--medium-fg); }
+        .stat-card.low .stat-value { color: var(--low-fg); }
+        .stat-card.info .stat-value { color: var(--info-fg); }
 
-        .section { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .filter-bar {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem 1.5rem;
+            align-items: center;
+        }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+        .filter-group-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .filter-chip {
+            border: 1px solid var(--border);
+            background: var(--bg-muted);
+            color: var(--text-muted);
+            border-radius: 9999px;
+            padding: 0.25rem 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .filter-chip.active { color: var(--text-strong); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+        .filter-chip.active.critical { background: var(--critical-bg); color: var(--critical-fg); border-color: var(--critical-fg); box-shadow: inset 0 0 0 1px var(--critical-fg); }
+        .filter-chip.active.high { background: var(--high-bg); color: var(--high-fg); border-color: var(--high-fg); box-shadow: inset 0 0 0 1px var(--high-fg); }
+        .filter-chip.active.medium { background: var(--medium-bg); color: var(--medium-fg); border-color: var(--medium-fg); box-shadow: inset 0 0 0 1px var(--medium-fg); }
+        .filter-chip.active.low { background: var(--low-bg); color: var(--low-fg); border-color: var(--low-fg); box-shadow: inset 0 0 0 1px var(--low-fg); }
+        .filter-chip.active.info { background: var(--info-bg); color: var(--info-fg); border-color: var(--info-fg); box-shadow: inset 0 0 0 1px var(--info-fg); }
+        .filter-reset { margin-left: auto; background: none; border: none; color: var(--link); font-size: 0.85rem; cursor: pointer; text-decoration: underline; }
+        .filter-count { font-size: 0.85rem; color: var(--text-muted); }
+
+        .section { background: var(--bg-card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 1.5rem; overflow: hidden; }
         .section-header {
             padding: 1.25rem 1.5rem;
             font-weight: 600;
@@ -60,12 +148,12 @@
             align-items: center;
             justify-content: space-between;
         }
-        .section-header.critical { background: #fef2f2; color: #dc2626; border-bottom: 1px solid #fecaca; }
-        .section-header.high { background: #fff7ed; color: #ea580c; border-bottom: 1px solid #fed7aa; }
-        .section-header.medium { background: #fffbeb; color: #d97706; border-bottom: 1px solid #fde68a; }
-        .section-header.low { background: #f7fef0; color: #65a30d; border-bottom: 1px solid #d9f99d; }
-        .section-header.info { background: #eff6ff; color: #2563eb; border-bottom: 1px solid #bfdbfe; }
-        .section-header.none { background: #f8fafc; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+        .section-header.critical { background: var(--critical-bg); color: var(--critical-fg); border-bottom: 1px solid var(--critical-border); }
+        .section-header.high { background: var(--high-bg); color: var(--high-fg); border-bottom: 1px solid var(--high-border); }
+        .section-header.medium { background: var(--medium-bg); color: var(--medium-fg); border-bottom: 1px solid var(--medium-border); }
+        .section-header.low { background: var(--low-bg); color: var(--low-fg); border-bottom: 1px solid var(--low-border); }
+        .section-header.info { background: var(--info-bg); color: var(--info-fg); border-bottom: 1px solid var(--info-border); }
+        .section-header.none { background: var(--bg-header-none); color: var(--text-muted); border-bottom: 1px solid var(--border); }
 
         .badge {
             padding: 0.25rem 0.75rem;
@@ -74,41 +162,44 @@
             font-weight: 600;
             text-transform: uppercase;
         }
-        .badge.critical { background: #fee2e2; color: #dc2626; }
-        .badge.high { background: #ffedd5; color: #ea580c; }
-        .badge.medium { background: #fef3c7; color: #d97706; }
-        .badge.low { background: #dcfce7; color: #65a30d; }
-        .badge.info { background: #dbeafe; color: #2563eb; }
+        .badge.critical { background: var(--critical-bg); color: var(--critical-fg); }
+        .badge.high { background: var(--high-bg); color: var(--high-fg); }
+        .badge.medium { background: var(--medium-bg); color: var(--medium-fg); }
+        .badge.low { background: var(--low-bg); color: var(--low-fg); }
+        .badge.info { background: var(--info-bg); color: var(--info-fg); }
+        .badge.neutral { background: var(--border); color: var(--text-muted); }
 
-        .finding { padding: 1.5rem; border-top: 1px solid #e2e8f0; }
+        .finding { padding: 1.5rem; border-top: 1px solid var(--border); }
         .finding:first-child { border-top: none; }
         .finding-header { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; }
-        .finding-title { font-size: 1.125rem; font-weight: 600; color: #1e293b; }
-        .finding-id { color: #64748b; font-family: monospace; font-size: 0.875rem; }
-        .finding-evidence { background: #f8fafc; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.875rem; color: #334155; white-space: pre-wrap; overflow-x: auto; }
-        .finding-fix { background: #f0fdf4; border-left: 3px solid #22c55e; padding: 1rem; border-radius: 0 8px 8px 0; }
-        .finding-fix-title { font-weight: 600; color: #166534; margin-bottom: 0.5rem; }
-        .finding-fix-text { color: #166534; }
-        .finding-refs { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
-        .finding-ref { color: #2563eb; text-decoration: none; font-size: 0.875rem; }
+        .finding-title { font-size: 1.125rem; font-weight: 600; color: var(--text-strong); }
+        .finding-id { color: var(--text-muted); font-family: monospace; font-size: 0.875rem; }
+        .finding-evidence { background: var(--bg-muted); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.875rem; color: var(--text-evidence); white-space: pre-wrap; overflow-x: auto; }
+        .finding-fix { background: var(--fix-bg); border-left: 3px solid var(--fix-border); padding: 1rem; border-radius: 0 8px 8px 0; }
+        .finding-fix-title { font-weight: 600; color: var(--fix-fg); margin-bottom: 0.5rem; }
+        .finding-fix-text { color: var(--fix-fg); }
+        .finding-refs { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+        .finding-ref { color: var(--link); text-decoration: none; font-size: 0.875rem; }
         .finding-ref:hover { text-decoration: underline; }
 
-        .category-section { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
-        .category-header { background: #f1f5f9; padding: 1rem 1.5rem; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0; }
+        .category-section { background: var(--bg-card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 1.5rem; overflow: hidden; }
+        .category-header { background: var(--bg-muted); padding: 1rem 1.5rem; font-weight: 600; color: var(--text-evidence); border-bottom: 1px solid var(--border); }
         .category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; padding: 1.5rem; }
-        .category-card { background: #f8fafc; border-radius: 8px; padding: 1rem; }
-        .category-card-title { font-weight: 600; color: #1e293b; margin-bottom: 0.5rem; }
-        .category-link { color: #667eea; text-decoration: none; font-size: 0.875rem; }
-        .category-link:hover { text-decoration: underline; }
+        .category-card { background: var(--bg-muted); border-radius: 8px; padding: 1rem; }
+        .category-card-title { font-weight: 600; color: var(--text-strong); margin-bottom: 0.5rem; }
+        .category-card-desc { margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-muted); }
 
-        .empty-state { text-align: center; padding: 3rem; color: #64748b; }
+        .hidden { display: none !important; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
         .empty-state svg { width: 64px; height: 64px; margin-bottom: 1rem; opacity: 0.5; }
-        footer { text-align: center; padding: 2rem; color: #64748b; font-size: 0.875rem; }
+        footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.875rem; }
+        footer a { color: var(--accent); }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">🌙 Dark</button>
             <h1>🛡️ AuthShield Security Audit Report</h1>
             <div class="meta">
                 <div class="meta-item"><strong>Target:</strong> {{ result.target }}</div>
@@ -141,16 +232,33 @@
             </div>
         </div>
 
+        <div class="filter-bar" id="filter-bar">
+            <div class="filter-group">
+                <span class="filter-group-label">Severity</span>
+                {% for severity in severity_order %}
+                <button type="button" class="filter-chip active {{ severity.lower() }}" data-filter-severity="{{ severity.lower() }}">{{ severity.title() }}</button>
+                {% endfor %}
+            </div>
+            <div class="filter-group">
+                <span class="filter-group-label">Category</span>
+                {% for category in categories.keys() %}
+                <button type="button" class="filter-chip active" data-filter-category="{{ category }}">{{ category.replace('_', ' ').title() }}</button>
+                {% endfor %}
+            </div>
+            <span class="filter-count" id="filter-count"></span>
+            <button type="button" class="filter-reset" id="filter-reset">Reset filters</button>
+        </div>
+
         {% for severity in severity_order %}
         {% set findings = findings_by_severity[severity] %}
         {% if findings %}
-        <div class="section">
+        <div class="section severity-section" data-severity="{{ severity.lower() }}">
             <div class="section-header {{ severity.lower() }}">
-                {{ severity }} Severity Findings ({{ findings|length }})
+                {{ severity }} Severity Findings (<span class="section-count">{{ findings|length }}</span>)
                 <span class="badge {{ severity.lower() }}">{{ severity }}</span>
             </div>
             {% for finding in findings %}
-            <div class="finding">
+            <div class="finding" data-severity="{{ severity.lower() }}" data-category="{{ finding.category.value }}">
                 <div class="finding-header">
                     <span class="finding-id">{{ finding.id }}</span>
                     <span class="finding-title">{{ finding.title }}</span>
@@ -174,10 +282,10 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="section">
+        <div class="section severity-section empty-section" data-severity="{{ severity.lower() }}">
             <div class="section-header none">
                 {{ severity }} Severity Findings (0)
-                <span class="badge" style="background:#e2e8f0;color:#64748b;">{{ severity }}</span>
+                <span class="badge neutral">{{ severity }}</span>
             </div>
             <div class="empty-state">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
@@ -187,16 +295,16 @@
         {% endif %}
         {% endfor %}
 
-        <h2 style="margin: 2rem 0 1rem; color: #1e293b;">Findings by Category</h2>
+        <h2 style="margin: 2rem 0 1rem; color: var(--text-strong);">Findings by Category</h2>
         {% for category, findings in categories.items() %}
-        <div class="category-section">
+        <div class="category-section" data-category="{{ category }}">
             <div class="category-header">{{ category.replace('_', ' ').title() }} ({{ findings|length }} findings)</div>
             <div class="category-grid">
                 {% for finding in findings %}
-                <div class="category-card">
+                <div class="category-card" data-severity="{{ finding.severity.value.lower() }}" data-category="{{ category }}">
                     <div class="category-card-title">{{ finding.id }}: {{ finding.title }}</div>
                     <span class="badge {{ finding.severity.value.lower() }}">{{ finding.severity.value }}</span>
-                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #64748b;">{{ finding.evidence.description[:100] }}...</div>
+                    <div class="category-card-desc">{{ finding.evidence.description[:100] }}...</div>
                 </div>
                 {% endfor %}
             </div>
@@ -205,8 +313,130 @@
 
         <footer>
             Generated by <strong>AuthShield</strong> v0.1.0 — Web Authentication Security Auditor<br>
-            <a href="https://github.com/Aditya0850/AuthShield" target="_blank" style="color: #667eea;">github.com/Aditya0850/AuthShield</a>
+            <a href="https://github.com/Aditya0850/AuthShield" target="_blank">github.com/Aditya0850/AuthShield</a>
         </footer>
     </div>
+
+    <script>
+    (function () {
+        "use strict";
+
+        /* ---------- Dark mode ---------- */
+        var THEME_KEY = "authshield-theme";
+        var toggleBtn = document.getElementById("theme-toggle");
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute("data-theme", theme);
+            if (toggleBtn) {
+                toggleBtn.textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+            }
+        }
+
+        function storedTheme() {
+            try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+        }
+
+        var initial = storedTheme();
+        if (!initial) {
+            initial = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark" : "light";
+        }
+        applyTheme(initial);
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener("click", function () {
+                var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+                applyTheme(next);
+                try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage unavailable */ }
+            });
+        }
+
+        /* ---------- Severity / category filtering ---------- */
+        var severityChips = Array.prototype.slice.call(document.querySelectorAll("[data-filter-severity]"));
+        var categoryChips = Array.prototype.slice.call(document.querySelectorAll("[data-filter-category]"));
+        var findings = Array.prototype.slice.call(document.querySelectorAll(".finding[data-severity]"));
+        var sections = Array.prototype.slice.call(document.querySelectorAll(".severity-section"));
+        var categoryCards = Array.prototype.slice.call(document.querySelectorAll(".category-card[data-severity]"));
+        var categorySections = Array.prototype.slice.call(document.querySelectorAll(".category-section[data-category]"));
+        var countLabel = document.getElementById("filter-count");
+        var resetBtn = document.getElementById("filter-reset");
+
+        function activeValues(chips, attr) {
+            var values = {};
+            chips.forEach(function (chip) {
+                if (chip.classList.contains("active")) {
+                    values[chip.getAttribute(attr)] = true;
+                }
+            });
+            return values;
+        }
+
+        function applyFilters() {
+            var severities = activeValues(severityChips, "data-filter-severity");
+            var categories = activeValues(categoryChips, "data-filter-category");
+            var visibleCount = 0;
+
+            findings.forEach(function (el) {
+                var show = severities[el.getAttribute("data-severity")] &&
+                           categories[el.getAttribute("data-category")];
+                el.classList.toggle("hidden", !show);
+                if (show) { visibleCount++; }
+            });
+
+            sections.forEach(function (section) {
+                var severityActive = severities[section.getAttribute("data-severity")];
+                if (!severityActive) {
+                    section.classList.add("hidden");
+                    return;
+                }
+                if (section.classList.contains("empty-section")) {
+                    section.classList.remove("hidden");
+                    return;
+                }
+                var anyVisible = section.querySelectorAll(".finding:not(.hidden)").length > 0;
+                section.classList.toggle("hidden", !anyVisible);
+            });
+
+            categoryCards.forEach(function (card) {
+                var show = severities[card.getAttribute("data-severity")] &&
+                           categories[card.getAttribute("data-category")];
+                card.classList.toggle("hidden", !show);
+            });
+
+            categorySections.forEach(function (section) {
+                var categoryActive = categories[section.getAttribute("data-category")];
+                var anyVisible = section.querySelectorAll(".category-card:not(.hidden)").length > 0;
+                section.classList.toggle("hidden", !(categoryActive && anyVisible));
+            });
+
+            if (countLabel) {
+                countLabel.textContent = "Showing " + visibleCount + " of " + findings.length + " findings";
+            }
+        }
+
+        function wireChips(chips) {
+            chips.forEach(function (chip) {
+                chip.addEventListener("click", function () {
+                    chip.classList.toggle("active");
+                    applyFilters();
+                });
+            });
+        }
+
+        wireChips(severityChips);
+        wireChips(categoryChips);
+
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function () {
+                severityChips.concat(categoryChips).forEach(function (chip) {
+                    chip.classList.add("active");
+                });
+                applyFilters();
+            });
+        }
+
+        applyFilters();
+    })();
+    </script>
 </body>
 </html>
