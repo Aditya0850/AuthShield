@@ -91,6 +91,9 @@ Machine-readable structured output with findings, evidence, and remediation guid
 ### HTML Report (`-f html` or `-f both`)
 Human-readable report grouped by severity and category with collapsible evidence details.
 
+### SARIF Report (`-f sarif` or `-f both`)
+[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) output for integration with GitHub Code Scanning, GitLab SAST, and other security tooling. Check IDs map to rules, severities map to SARIF levels (CRITICAL/HIGH → error, MEDIUM → warning, LOW/INFO → note), and each rule carries a GitHub `security-severity` score.
+
 ---
 
 ## Local Testing with VulnApp
@@ -166,7 +169,7 @@ Options:
   -H, --header TEXT       Headers in format 'Name: Value' (multiple)
   -t, --timeout INT       Request timeout in seconds (default: 10)
   --no-ssl-verify         Disable SSL certificate verification
-  -f, --format [json|html|both]  Output format (default: both)
+  -f, --format [json|html|sarif|both]  Output format (default: both)
   -o, --output TEXT       Output file path (without extension)
   --exclude-checks TEXT   Comma-separated check IDs to skip (e.g. RATE-001,JWT-004)
   -v, --verbose           Verbose output
@@ -278,6 +281,7 @@ authshield/
 ### Unreleased
 - `--exclude-checks` CLI flag to skip selected check IDs (#1)
 - Per-category scan progress indicator on interactive terminals (#2)
+- SARIF 2.1.0 output format (`-f sarif`; included in `-f both`) (#4)
 
 ### v0.1.0 (2026-08-11)
 - Initial release with 11 checks across 6 categories
