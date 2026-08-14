@@ -45,23 +45,42 @@ mypy authshield/
 ## Project Structure
 
 ```
-authshield/
-├── cli.py                 # Click CLI entry point (scan, checks, quick commands)
-├── core/
-│   ├── http_client.py     # Conservative HTTP client (budget, retries, pooling)
-│   ├── models.py          # Pydantic models (Finding, ScanResult, Severity, Category)
-│   └── scanner.py         # Main orchestration (request budget aware)
-├── checks/
-│   ├── auth.py            # AUTH-001: Weak password policy
-│   ├── rate_limit.py      # RATE-001: Login rate limiting
-│   ├── enum.py            # ENUM-001: User enumeration via error messages
-│   ├── cookies.py         # COOKIE-001/002/003: Session cookie flags
-│   ├── cors.py            # CORS-001/002: CORS & security headers
-│   └── jwt.py             # JWT-001/003/004: JWT security
-├── reporting/
-│   ├── html_report.py     # Jinja2 HTML reporter (templates/report.html.j2)
-│   └── json_report.py     # JSON reporter
-��── __init__.py
+AuthShield/
+├── authshield/                    # Main package
+│   ├── __init__.py
+│   ├── cli.py                     # Click CLI entry point (scan, checks, quick)
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── http_client.py         # Conservative HTTP client (budget, retries)
+│   │   ├── models.py              # Pydantic models (Finding, ScanResult, etc.)
+│   │   └── scanner.py             # Main orchestration (request budget aware)
+│   ├── checks/
+│   │   ├── __init__.py
+│   │   ├── auth.py                # AUTH-001: Weak password policy
+│   │   ├── rate_limit.py          # RATE-001: Login rate limiting
+│   │   ├── enum.py                # ENUM-001: User enumeration via errors
+│   │   ├── cookies.py             # COOKIE-001/002/003: Session cookie flags
+│   │   ├── cors.py                # CORS-001/002: CORS & security headers
+│   │   └── jwt.py                 # JWT-001/003/004: JWT security
+│   └── reporting/
+│       ├── __init__.py
+│       ├── html_report.py         # Jinja2 HTML reporter
+│       └── json_report.py         # JSON reporter
+├── templates/
+│   └── report.html.j2             # HTML report template
+├── tests/
+│   └── test_authshield.py         # Full test suite (50+ mocked tests)
+├── vuln_app.py                    # Deliberately vulnerable demo app
+├── pyproject.toml                 # Project metadata, deps, tool config
+├── pytest.ini                     # Pytest configuration
+├── README.md                      # Project documentation
+├── LICENSE                        # MIT License
+├── CONTRIBUTING.md                # This file
+├── .gitignore
+��── .github/                       # GitHub workflows (if present)
+
+# Generated artifacts (not tracked):
+# authshield-report.json, scan_result.json, *.html, etc.
 ```
 
 ## How to Add a New Security Check
