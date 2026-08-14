@@ -738,5 +738,124 @@ class TestScannerIntegration:
         scanner.client.close()
 
 
+class TestExcludeChecks:
+    def _scanner_with_mocked_modules(self, **kwargs):
+        scanner = Scanner(target="https://example.com", verbose=False, **kwargs)
+        scanner.auth_checks = Mock()
+        scanner.rate_limit_checks = Mock()
+        scanner.enum_checks = Mock()
+        scanner.cookie_checks = Mock()
+        scanner.cors_checks = Mock()
+        scanner.jwt_checks = Mock()
+        return scanner
+
+    def test_exclude_checks_normalized(self):
+        scanner = Scanner(
+            target="https://example.com",
+            exclude_checks=[" cookie-001 ", "JWT-004", ""],
+        )
+        assert scanner.excluded_checks == {"COOKIE-001", "JWT-004"}
+        assert scanner.is_check_excluded("COOKIE-001")
+        assert scanner.is_check_excluded("cookie-001")
+        assert not scanner.is_check_excluded("COOKIE-002")
+        scanner.client.close()
+
+    def test_no_exclusions_by_default(self):
+        scanner = Scanner(target="https://example.com")
+        assert scanner.excluded_checks == set()
+        assert not scanner.is_check_excluded("AUTH-001")
+        scanner.client.close()
+
+    def test_scan_skips_fully_excluded_category(self):
+        scanner = self._scanner_with_mocked_modules(
+            exclude_checks=["RATE-001", "COOKIE-001", "COOKIE-002", "COOKIE-003"],
+        )
+        scanner.scan()
+        scanner.rate_limit_checks.run_all.assert_not_called()
+        scanner.cookie_checks.run_all.assert_not_called()
+        scanner.auth_checks.run_all.assert_called_once()
+        scanner.enum_checks.run_all.assert_called_once()
+        scanner.cors_checks.run_all.assert_called_once()
+        scanner.jwt_checks.run_all.assert_called_once()
+
+    def test_scan_runs_partially_excluded_category(self):
+        # Excluding one of three cookie checks must not skip the whole module
+        scanner = self._scanner_with_mocked_modules(exclude_checks=["COOKIE-002"])
+        scanner.scan()
+        scanner.cookie_checks.run_all.assert_called_once()
+
+    def test_cookie_run_all_skips_excluded_check(self):
+        mock_scanner = Mock()
+        mock_scanner.is_check_excluded = lambda cid: cid == "COOKIE-002"
+        checks = CookieChecks(mock_scanner)
+        checks.check_secure_flag = Mock()
+        checks.check_httponly_flag = Mock()
+        checks.check_samesite_attribute = Mock()
+
+        checks.run_all()
+
+        checks.check_secure_flag.assert_called_once()
+        checks.check_httponly_flag.assert_not_called()
+        checks.check_samesite_attribute.assert_called_once()
+
+    def test_cors_run_all_skips_excluded_check(self):
+        mock_scanner = Mock()
+        mock_scanner.is_check_excluded = lambda cid: cid == "CORS-001"
+        checks = CORSChecks(mock_scanner)
+        checks.check_cors_policy = Mock()
+        checks.check_security_headers = Mock()
+
+        checks.run_all()
+
+        checks.check_cors_policy.assert_not_called()
+        checks.check_security_headers.assert_called_once()
+
+    def test_jwt_run_all_skips_collection_when_all_excluded(self):
+        mock_scanner = Mock()
+        mock_scanner.is_check_excluded = lambda cid: True
+        checks = JWTChecks(mock_scanner)
+        checks.collect_jwt_tokens = Mock()
+
+        checks.run_all()
+
+        checks.collect_jwt_tokens.assert_not_called()
+
+    def test_jwt_run_all_runs_only_included_checks(self):
+        mock_scanner = Mock()
+        mock_scanner.is_check_excluded = lambda cid: cid == "JWT-004"
+        checks = JWTChecks(mock_scanner)
+        checks.collect_jwt_tokens = Mock(
+            side_effect=lambda: checks.jwt_tokens.append("token")
+        )
+        checks.check_algorithm_confusion = Mock()
+        checks.check_missing_expiration = Mock()
+        checks.check_none_algorithm = Mock()
+
+        checks.run_all()
+
+        checks.check_algorithm_confusion.assert_called_once_with("token")
+        checks.check_missing_expiration.assert_called_once_with("token")
+        checks.check_none_algorithm.assert_not_called()
+
+    def test_parse_exclude_checks(self):
+        from authshield.cli import parse_exclude_checks
+
+        valid, unknown = parse_exclude_checks("rate-001, JWT-004,BOGUS-999,rate-001,")
+        assert valid == ["RATE-001", "JWT-004"]
+        assert unknown == ["BOGUS-999"]
+
+        valid, unknown = parse_exclude_checks(None)
+        assert valid == []
+        assert unknown == []
+
+    def test_known_check_ids_cover_all_categories(self):
+        scanner = Scanner(target="https://example.com")
+        category_ids = set()
+        for _, _, check_ids in scanner.get_check_categories():
+            category_ids |= check_ids
+        assert category_ids == set(Scanner.KNOWN_CHECK_IDS)
+        scanner.client.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -22,6 +22,27 @@ else:
     console = Console()
 
 
+def parse_exclude_checks(raw: str | None) -> tuple[list[str], list[str]]:
+    """Parse a comma-separated string of check IDs.
+
+    Returns (valid_ids, unknown_ids), both uppercased and deduplicated,
+    preserving input order.
+    """
+    valid: list[str] = []
+    unknown: list[str] = []
+    if not raw:
+        return valid, unknown
+    for part in raw.split(","):
+        check_id = part.strip().upper()
+        if not check_id or check_id in valid or check_id in unknown:
+            continue
+        if check_id in Scanner.KNOWN_CHECK_IDS:
+            valid.append(check_id)
+        else:
+            unknown.append(check_id)
+    return valid, unknown
+
+
 @click.group()
 @click.version_option(version="0.1.0", prog_name="AuthShield")
 def cli():
@@ -41,15 +62,26 @@ def cli():
 @click.option("--no-ssl-verify", is_flag=True, help="Disable SSL verification")
 @click.option("-f", "--format", "output_format", type=click.Choice(["json", "html", "both"]), default="both")
 @click.option("-o", "--output", help="Output file path (without extension)")
+@click.option("--exclude-checks", "exclude_checks",
+              help="Comma-separated check IDs to skip (e.g. 'RATE-001,JWT-004')")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
-         timeout: int, no_ssl_verify: bool, output_format: str, output: str, verbose: bool):
+         timeout: int, no_ssl_verify: bool, output_format: str, output: str,
+         exclude_checks: str, verbose: bool):
     """Scan a target web application for authentication security issues."""
 
     # Parse endpoints
     endpoint_list = None
     if endpoints:
         endpoint_list = [e.strip() for e in endpoints.split(",")]
+
+    # Parse and validate excluded check IDs
+    excluded, unknown = parse_exclude_checks(exclude_checks)
+    if unknown:
+        console.print(
+            f"[yellow]WARNING[/yellow] Unknown check ID(s) ignored: {', '.join(unknown)}\n"
+            f"  Run 'authshield checks' to list valid check IDs."
+        )
 
     # Parse cookies
     cookie_dict = {}
@@ -69,7 +101,8 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         f"[bold]Target:[/bold] {target}\n"
         f"[bold]Endpoints:[/bold] {len(endpoint_list) if endpoint_list else 'default'}\n"
         f"[bold]Cookies:[/bold] {len(cookie_dict)}\n"
-        f"[bold]Headers:[/bold] {len(header_dict)}",
+        f"[bold]Headers:[/bold] {len(header_dict)}\n"
+        f"[bold]Excluded checks:[/bold] {', '.join(excluded) if excluded else 'none'}",
         title="AuthShield Scan",
         border_style="blue"
     ))
@@ -82,6 +115,7 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         timeout=timeout,
         verify_ssl=not no_ssl_verify,
         verbose=verbose,
+        exclude_checks=excluded,
     )
 
     with Progress(
@@ -113,6 +147,9 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
 
     table.add_row("[bold]Total[/bold]", f"[bold]{total}[/bold]", "100%")
     console.print(table)
+
+    if excluded:
+        console.print(f"[dim]Excluded checks (not scanned): {', '.join(excluded)}[/dim]")
 
     # Print findings
     if result.findings:
