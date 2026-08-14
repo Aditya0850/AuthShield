@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
 from authshield.core.http_client import make_finding
-from authshield.core.models import Category, Severity
+from authshield.core.models import Category, Confidence, EvidenceType, Exploitability, Severity
 
 
 class RateLimitChecks:
@@ -97,4 +97,8 @@ class RateLimitChecks:
                             "methodology": f"{self.MAX_TEST_REQUESTS} rapid POST requests (JSON + form fallback)",
                             "responses": responses,
                         },
+                        confidence=Confidence.MEDIUM,
+                        evidence_type=EvidenceType.BEHAVIORAL,
+                        exploitability=Exploitability.LIKELY,
+                        context={"check_type": "active_behavioral_test", "requests_sent": self.MAX_TEST_REQUESTS},
                     ))

@@ -42,8 +42,9 @@ def cli():
 @click.option("-f", "--format", "output_format", type=click.Choice(["json", "html", "both"]), default="both")
 @click.option("-o", "--output", help="Output file path (without extension)")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
+@click.option("--exclude-checks", help="Comma-separated list of check IDs to exclude (e.g., CORS-002,JWT-001)")
 def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
-         timeout: int, no_ssl_verify: bool, output_format: str, output: str, verbose: bool):
+         timeout: int, no_ssl_verify: bool, output_format: str, output: str, verbose: bool, exclude_checks: str):
     """Scan a target web application for authentication security issues."""
 
     # Parse endpoints
@@ -65,6 +66,11 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
             k, v = header.split(":", 1)
             header_dict[k.strip()] = v.strip()
 
+    # Parse excluded checks
+    excluded_list = None
+    if exclude_checks:
+        excluded_list = [c.strip() for c in exclude_checks.split(",")]
+
     console.print(Panel.fit(
         f"[bold]Target:[/bold] {target}\n"
         f"[bold]Endpoints:[/bold] {len(endpoint_list) if endpoint_list else 'default'}\n"
@@ -82,6 +88,7 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         timeout=timeout,
         verify_ssl=not no_ssl_verify,
         verbose=verbose,
+        excluded_checks=excluded_list,
     )
 
     with Progress(

@@ -34,6 +34,7 @@ class Scanner:
         verify_ssl: bool = True,
         verbose: bool = False,
         max_requests: int = 100,
+        excluded_checks: list[str] | None = None,
     ):
         self.target = target.rstrip("/")
         self.endpoints = endpoints or self.DEFAULT_ENDPOINTS
@@ -47,6 +48,7 @@ class Scanner:
         self.verbose = verbose
         self.result = ScanResult(target=target)
         self._scan_start_time: float | None = None
+        self.excluded_checks = set(excluded_checks) if excluded_checks else set()
 
         # Initialize check modules - imports here to avoid circular imports
         from authshield.checks.auth import AuthChecks
@@ -137,6 +139,10 @@ class Scanner:
         except HTTPClientError as e:
             self.log(f"Request failed for {url}: {e}")
             return None
+
+    def is_check_excluded(self, check_id: str) -> bool:
+        """Check if a check ID is in the excluded list."""
+        return check_id in self.excluded_checks
 
     def get_relevant_endpoints(self, category: str) -> list[str]:
         """Get endpoints relevant to a check category."""

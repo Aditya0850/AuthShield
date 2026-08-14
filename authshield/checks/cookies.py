@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
 from authshield.core.http_client import make_finding
-from authshield.core.models import Category, Severity
+from authshield.core.models import Category, Confidence, EvidenceType, Exploitability, Severity
 
 
 class CookieChecks:
@@ -15,9 +15,12 @@ class CookieChecks:
         self.client = scanner.client
 
     def run_all(self):
-        self.check_secure_flag()
-        self.check_httponly_flag()
-        self.check_samesite_attribute()
+        if not self.scanner.is_check_excluded("COOKIE-001"):
+            self.check_secure_flag()
+        if not self.scanner.is_check_excluded("COOKIE-002"):
+            self.check_httponly_flag()
+        if not self.scanner.is_check_excluded("COOKIE-003"):
+            self.check_samesite_attribute()
 
     def check_secure_flag(self):
         """COOKIE-001: Check for missing Secure flag on session cookies"""
@@ -37,6 +40,10 @@ class CookieChecks:
                         fix="Set Secure flag on all session cookies. Ensure site uses HTTPS only.",
                         references=["https://owasp.org/www-project-session-management-cheat-sheet/"],
                         raw_data={"cookie_name": cookie.name, "cookie_value": cookie.value[:20] + "..."},
+                        confidence=Confidence.MEDIUM,
+                        evidence_type=EvidenceType.INDICATOR,
+                        exploitability=Exploitability.LIKELY,
+                        context={"check_type": "cookie_attribute_analysis", "attribute": "secure", "endpoint": "/"},
                     ))
 
     def check_httponly_flag(self):
@@ -58,6 +65,10 @@ class CookieChecks:
                         fix="Set HttpOnly flag on all session cookies to prevent XSS theft",
                         references=["https://owasp.org/www-project-session-management-cheat-sheet/"],
                         raw_data={"cookie_name": cookie.name, "cookie_value": cookie.value[:20] + "..."},
+                        confidence=Confidence.MEDIUM,
+                        evidence_type=EvidenceType.INDICATOR,
+                        exploitability=Exploitability.LIKELY,
+                        context={"check_type": "cookie_attribute_analysis", "attribute": "httponly", "endpoint": "/"},
                     ))
 
     def check_samesite_attribute(self):
@@ -80,6 +91,10 @@ class CookieChecks:
                         fix="Set SameSite=Strict or SameSite=Lax on session cookies. Use SameSite=None only with Secure for cross-site requests.",
                         references=["https://owasp.org/www-project-session-management-cheat-sheet/"],
                         raw_data={"cookie_name": cookie.name, "samesite": samesite},
+                        confidence=Confidence.MEDIUM,
+                        evidence_type=EvidenceType.INDICATOR,
+                        exploitability=Exploitability.LIKELY if samesite is None else Exploitability.THEORETICAL,
+                        context={"check_type": "cookie_attribute_analysis", "attribute": "samesite", "endpoint": "/"},
                     ))
 
     def _is_session_cookie(self, name: str) -> bool:

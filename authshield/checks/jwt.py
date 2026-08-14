@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
 from authshield.core.http_client import make_finding
-from authshield.core.models import Category, Severity
+from authshield.core.models import Category, Confidence, EvidenceType, Exploitability, Severity
 
 
 class JWTChecks:
@@ -147,6 +147,11 @@ class JWTChecks:
                 ),
                 references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                 raw_data={"algorithm": alg, "header": header, "jwks_found": False},
+                confidence=Confidence.LOW,
+                evidence_type=EvidenceType.INDICATOR,
+                exploitability=Exploitability.THEORETICAL,
+                context={"check_type": "jwt_algorithm_analysis", "jwks_discovered": False,
+                         "algorithm": alg, "risk": "algorithm_confusion_if_unpinned"},
             ))
             return
 
@@ -165,6 +170,11 @@ class JWTChecks:
             ),
             references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
             raw_data={"algorithm": alg, "header": header, "jwks_found": True},
+            confidence=Confidence.MEDIUM,
+            evidence_type=EvidenceType.INDICATOR,
+            exploitability=Exploitability.THEORETICAL,
+            context={"check_type": "jwt_algorithm_analysis", "jwks_discovered": True,
+                     "algorithm": alg, "risk": "algorithm_confusion_if_unpinned"},
         ))
 
     def check_missing_expiration(self, token: str):
@@ -183,6 +193,11 @@ class JWTChecks:
                 fix="Always include 'exp' claim with reasonable lifetime (15-60 min for access tokens). Use 'iat' and 'nbf' as well.",
                 references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                 raw_data={"payload_keys": list(payload.keys())},
+                confidence=Confidence.HIGH,
+                evidence_type=EvidenceType.PROOF,
+                exploitability=Exploitability.PROVEN,
+                context={"check_type": "jwt_claim_analysis", "missing_claim": "exp",
+                         "risk": "indefinite_token_validity"},
             ))
         else:
             import time
@@ -198,6 +213,11 @@ class JWTChecks:
                     fix="Reduce token lifetime. Use short-lived access tokens (15-60 min) with refresh tokens.",
                     references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                     raw_data={"expires_in_days": (exp - now) // 86400},
+                    confidence=Confidence.HIGH,
+                    evidence_type=EvidenceType.PROOF,
+                    exploitability=Exploitability.LIKELY,
+                    context={"check_type": "jwt_claim_analysis", "claim": "exp",
+                             "risk": "excessive_lifetime", "days": (exp - now) // 86400},
                 ))
 
     def check_none_algorithm(self, token: str):
@@ -218,6 +238,11 @@ class JWTChecks:
                 fix="Reject tokens with 'none' algorithm. Configure JWT library to require signature verification.",
                 references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                 raw_data={"algorithm": "none"},
+                confidence=Confidence.HIGH,
+                evidence_type=EvidenceType.PROOF,
+                exploitability=Exploitability.PROVEN,
+                context={"check_type": "jwt_algorithm_validation", "algorithm": "none",
+                         "detection": "passive", "risk": "no_signature_verification"},
             ))
             return
 
@@ -262,6 +287,11 @@ class JWTChecks:
                             fix="Configure JWT library to reject 'none' algorithm. Require signature verification.",
                             references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                             raw_data={"endpoint": endpoint, "algorithm": "none"},
+                            confidence=Confidence.HIGH,
+                            evidence_type=EvidenceType.PROOF,
+                            exploitability=Exploitability.PROVEN,
+                            context={"check_type": "jwt_algorithm_validation", "algorithm": "none",
+                                     "detection": "active", "endpoint": endpoint, "risk": "auth_bypass"},
                         ))
                         return
                     elif test_resp is not None and test_resp.status_code != 401:
@@ -280,6 +310,12 @@ class JWTChecks:
                             fix="Configure JWT library to reject 'none' algorithm. Require signature verification.",
                             references=["https://owasp.org/www-project-json-web-token-jwt-cheat-sheet/"],
                             raw_data={"endpoint": endpoint, "algorithm": "none", "response_status": test_resp.status_code},
+                            confidence=Confidence.HIGH,
+                            evidence_type=EvidenceType.PROOF,
+                            exploitability=Exploitability.LIKELY,
+                            context={"check_type": "jwt_algorithm_validation", "algorithm": "none",
+                                     "detection": "active", "endpoint": endpoint,
+                                     "risk": "algorithm_not_rejected", "response_status": test_resp.status_code},
                         ))
                         return
                 except (ValueError, TypeError, json.JSONDecodeError):

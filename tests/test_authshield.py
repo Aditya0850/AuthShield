@@ -552,8 +552,10 @@ class TestCORSChecks:
     def test_check_security_headers_missing_csp_hsts(self):
         mock_scanner = Mock()
         mock_resp = Mock()
-        mock_resp.headers = {}  # No security headers
+        mock_resp.headers = {"Content-Type": "text/html"}  # Proper HTML content type
+        mock_resp.text = "<html><body><form>Login</form></body></html>"  # Traditional web app
         mock_scanner.make_request.return_value = mock_resp
+        mock_scanner.target = "https://example.com"
 
         checks = CORSChecks(mock_scanner)
         checks.check_security_headers()
@@ -561,8 +563,10 @@ class TestCORSChecks:
         mock_scanner.add_finding.assert_called()
         call_args = mock_scanner.add_finding.call_args[0][0]
         assert call_args.id == "CORS-002"
+        # With context-aware severity: traditional_web_app + HTTPS + missing CSP/HSTS = HIGH
         assert call_args.severity == Severity.HIGH
         assert "Content-Security-Policy" in call_args.evidence.raw_data["missing"]
+        assert "Strict-Transport-Security (HSTS)" in call_args.evidence.raw_data["missing"]
 
     def test_check_security_headers_csp_unsafe_inline(self):
         mock_scanner = Mock()
@@ -571,14 +575,20 @@ class TestCORSChecks:
             "Content-Security-Policy": "default-src 'self' 'unsafe-inline'",
             "Strict-Transport-Security": "max-age=31536000",
         }
+        mock_resp.text = "<html><body><form>Login</form></body></html>"  # Traditional web app
         mock_scanner.make_request.return_value = mock_resp
+        mock_scanner.target = "https://example.com"
 
         checks = CORSChecks(mock_scanner)
         checks.check_security_headers()
 
         mock_scanner.add_finding.assert_called()
         call_args = mock_scanner.add_finding.call_args[0][0]
-        assert "unsafe-inline" in call_args.evidence.raw_data["issues"][0]
+        # Issues are now in header_details
+        assert "Content-Security-Policy" in call_args.evidence.raw_data["header_details"]
+        assert "issues" in call_args.evidence.raw_data["header_details"]["Content-Security-Policy"]
+        issues = call_args.evidence.raw_data["header_details"]["Content-Security-Policy"]["issues"]
+        assert any("unsafe-inline" in issue for issue in issues)
 
 
 class TestJWTChecks:

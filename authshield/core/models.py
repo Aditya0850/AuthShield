@@ -24,6 +24,29 @@ class Category(str, Enum):
     JWT = "jwt"
 
 
+class Confidence(str, Enum):
+    """Confidence in the finding based on evidence quality."""
+    HIGH = "high"       # Proof: direct validation (e.g., endpoint accepted none-alg JWT)
+    MEDIUM = "medium"   # Behavioral: observed behavior indicates vulnerability
+    LOW = "low"         # Indicator: heuristic/configuration signal (e.g., missing header)
+
+
+class EvidenceType(str, Enum):
+    """Type of evidence supporting the finding."""
+    PROOF = "proof"             # Direct validation of vulnerability
+    BEHAVIORAL = "behavioral"   # Observed behavior difference
+    INDICATOR = "indicator"     # Configuration/heuristic signal
+    THEORETICAL = "theoretical" # Risk without direct observation
+
+
+class Exploitability(str, Enum):
+    """Likelihood of practical exploitation."""
+    PROVEN = "proven"       # Vulnerability directly validated
+    LIKELY = "likely"       # High probability given observations
+    THEORETICAL = "theoretical"  # Possible but unconfirmed
+    NONE = "none"           # No practical exploit path
+
+
 class Evidence(BaseModel):
     description: str
     raw_data: dict[str, Any] | None = None
@@ -40,6 +63,11 @@ class Finding(BaseModel):
     fix: str
     references: list[str] = Field(default_factory=list)
     cvss_score: float | None = None
+    cvss_vector: str | None = None
+    confidence: Confidence = Confidence.LOW
+    evidence_type: EvidenceType = EvidenceType.INDICATOR
+    exploitability: Exploitability = Exploitability.THEORETICAL
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScanSummary(BaseModel):
