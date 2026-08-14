@@ -283,6 +283,55 @@ class TestHTMLReporter:
         assert "Critical" in content
         assert "High" in content
 
+    def _result_with_two_categories(self):
+        result = ScanResult(target="https://example.com")
+        result.add_finding(Finding(
+            id="COOKIE-001",
+            title="Missing Secure Flag",
+            severity=Severity.HIGH,
+            category=Category.SESSION,
+            evidence=Evidence(description="Session cookie lacks Secure flag"),
+            fix="Set Secure flag",
+        ))
+        result.add_finding(Finding(
+            id="JWT-004",
+            title="Accepts none Algorithm",
+            severity=Severity.CRITICAL,
+            category=Category.JWT,
+            evidence=Evidence(description="Endpoint accepted alg=none token"),
+            fix="Reject alg=none",
+        ))
+        return result
+
+    def test_html_includes_filter_controls(self):
+        html = HTMLReporter.generate(self._result_with_two_categories())
+        # Severity filter chips for all five severities
+        for severity in ("critical", "high", "medium", "low", "info"):
+            assert f'data-filter-severity="{severity}"' in html
+        # Category filter chips only for categories present in the result
+        assert 'data-filter-category="session"' in html
+        assert 'data-filter-category="jwt"' in html
+        assert 'data-filter-category="cors_headers"' not in html
+        assert 'id="filter-reset"' in html
+
+    def test_html_findings_carry_filter_attributes(self):
+        html = HTMLReporter.generate(self._result_with_two_categories())
+        assert 'data-severity="high" data-category="session"' in html
+        assert 'data-severity="critical" data-category="jwt"' in html
+
+    def test_html_includes_dark_mode_toggle(self):
+        html = HTMLReporter.generate(self._result_with_two_categories())
+        assert 'id="theme-toggle"' in html
+        assert 'data-theme="dark"' in html          # dark theme CSS variables
+        assert "authshield-theme" in html            # localStorage persistence key
+        assert "prefers-color-scheme" in html        # respects OS preference
+
+    def test_html_is_self_contained(self):
+        # Must render as a static file: no external scripts or stylesheets
+        html = HTMLReporter.generate(self._result_with_two_categories())
+        assert "<script src=" not in html
+        assert '<link rel="stylesheet"' not in html
+
 
 class TestAuthChecks:
     def test_check_weak_password_policy_detects_weak(self):
