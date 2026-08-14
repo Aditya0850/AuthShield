@@ -376,8 +376,10 @@ class TestEnumChecks:
             "nonexistentuser12345": Mock(status_code=404, text="User not found"),
         }
 
-        def make_request(method, endpoint, data=None):
-            user = data.get("username") if data else None
+        def make_request(method, endpoint, json=None, data=None):
+            # Handle both json and data kwargs
+            payload = json or data
+            user = payload.get("username") if payload else None
             return responses.get(user)
 
         mock_scanner.make_request.side_effect = make_request
