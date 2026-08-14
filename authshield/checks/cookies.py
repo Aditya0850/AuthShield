@@ -15,9 +15,12 @@ class CookieChecks:
         self.client = scanner.client
 
     def run_all(self):
-        self.check_secure_flag()
-        self.check_httponly_flag()
-        self.check_samesite_attribute()
+        if not self.scanner.is_check_excluded("COOKIE-001"):
+            self.check_secure_flag()
+        if not self.scanner.is_check_excluded("COOKIE-002"):
+            self.check_httponly_flag()
+        if not self.scanner.is_check_excluded("COOKIE-003"):
+            self.check_samesite_attribute()
 
     def check_secure_flag(self):
         """COOKIE-001: Check for missing Secure flag on session cookies"""

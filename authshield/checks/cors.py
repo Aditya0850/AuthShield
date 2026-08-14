@@ -15,8 +15,10 @@ class CORSChecks:
         self.client = scanner.client
 
     def run_all(self):
-        self.check_cors_policy()
-        self.check_security_headers()
+        if not self.scanner.is_check_excluded("CORS-001"):
+            self.check_cors_policy()
+        if not self.scanner.is_check_excluded("CORS-002"):
+            self.check_security_headers()
 
     def check_cors_policy(self):
         """CORS-001: Check for overly permissive CORS policy"""

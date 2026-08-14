@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from typing import Any, ClassVar
 from urllib.parse import urljoin
 
@@ -24,6 +25,16 @@ class Scanner:
         "/password/reset", "/forgot-password", "/api/password/reset",
     ]
 
+    # All check IDs implemented by the scanner, used to validate --exclude-checks
+    KNOWN_CHECK_IDS: ClassVar[frozenset[str]] = frozenset({
+        "AUTH-001",
+        "RATE-001",
+        "ENUM-001",
+        "COOKIE-001", "COOKIE-002", "COOKIE-003",
+        "CORS-001", "CORS-002",
+        "JWT-001", "JWT-003", "JWT-004",
+    })
+
     def __init__(
         self,
         target: str,
@@ -34,6 +45,7 @@ class Scanner:
         verify_ssl: bool = True,
         verbose: bool = False,
         max_requests: int = 100,
+        exclude_checks: Iterable[str] | None = None,
     ):
         self.target = target.rstrip("/")
         self.endpoints = endpoints or self.DEFAULT_ENDPOINTS
@@ -45,6 +57,11 @@ class Scanner:
             max_requests=max_requests,
         )
         self.verbose = verbose
+        self.excluded_checks: set[str] = {
+            check_id.strip().upper()
+            for check_id in (exclude_checks or [])
+            if check_id.strip()
+        }
         self.result = ScanResult(target=target)
         self._scan_start_time: float | None = None
 
@@ -67,29 +84,38 @@ class Scanner:
         if self.verbose:
             print(f"  [+] {message}")
 
+    def is_check_excluded(self, check_id: str) -> bool:
+        """Return True if the given check ID was excluded for this scan."""
+        return check_id.upper() in self.excluded_checks
+
+    def get_check_categories(self) -> list[tuple[str, Any, frozenset[str]]]:
+        """Return ordered check categories as (label, module, check_ids) tuples."""
+        return [
+            ("Authentication checks", self.auth_checks, frozenset({"AUTH-001"})),
+            ("Rate limiting checks", self.rate_limit_checks, frozenset({"RATE-001"})),
+            ("User enumeration checks", self.enum_checks, frozenset({"ENUM-001"})),
+            ("Session cookie checks", self.cookie_checks,
+             frozenset({"COOKIE-001", "COOKIE-002", "COOKIE-003"})),
+            ("CORS & security header checks", self.cors_checks,
+             frozenset({"CORS-001", "CORS-002"})),
+            ("JWT checks", self.jwt_checks,
+             frozenset({"JWT-001", "JWT-003", "JWT-004"})),
+        ]
+
     def scan(self) -> ScanResult:
         """Execute full scan and return results."""
         self._scan_start_time = time.time()
         print(f"[*] Starting scan on {self.target}")
+        if self.excluded_checks:
+            print(f"[*] Excluded checks: {', '.join(sorted(self.excluded_checks))}")
 
         try:
-            self.log("Running authentication checks...")
-            self.auth_checks.run_all()
-
-            self.log("Running rate limiting checks...")
-            self.rate_limit_checks.run_all()
-
-            self.log("Running user enumeration checks...")
-            self.enum_checks.run_all()
-
-            self.log("Running session cookie checks...")
-            self.cookie_checks.run_all()
-
-            self.log("Running CORS & security header checks...")
-            self.cors_checks.run_all()
-
-            self.log("Running JWT checks...")
-            self.jwt_checks.run_all()
+            for label, module, check_ids in self.get_check_categories():
+                if check_ids and check_ids <= self.excluded_checks:
+                    self.log(f"Skipping {label.lower()} (all checks excluded)")
+                    continue
+                self.log(f"Running {label.lower()}...")
+                module.run_all()
 
         except KeyboardInterrupt:
             print("\n[!] Scan interrupted by user")
@@ -101,6 +127,8 @@ class Scanner:
                 self.result.scan_duration = time.time() - self._scan_start_time
 
         print(f"[*] Scan completed in {self.result.scan_duration:.2f}s")
+        if self.excluded_checks:
+            print(f"[*] Skipped excluded checks: {', '.join(sorted(self.excluded_checks))}")
         print(f"[*] Found {self.result.summary.total()} issues "
               f"(Critical: {self.result.summary.critical}, "
               f"High: {self.result.summary.high}, "

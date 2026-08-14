@@ -28,11 +28,19 @@ class JWTChecks:
         self.jwks_cache: dict | None = None
 
     def run_all(self):
+        run_confusion = not self.scanner.is_check_excluded("JWT-001")
+        run_expiration = not self.scanner.is_check_excluded("JWT-003")
+        run_none_algo = not self.scanner.is_check_excluded("JWT-004")
+        if not (run_confusion or run_expiration or run_none_algo):
+            return
+
         self.collect_jwt_tokens()
-        if self.jwt_tokens:
-            for token in self.jwt_tokens:
+        for token in self.jwt_tokens:
+            if run_confusion:
                 self.check_algorithm_confusion(token)
+            if run_expiration:
                 self.check_missing_expiration(token)
+            if run_none_algo:
                 self.check_none_algorithm(token)
 
     def collect_jwt_tokens(self):
