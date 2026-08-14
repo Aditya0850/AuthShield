@@ -6,7 +6,7 @@ import sys
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, TextColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from authshield.core.models import Severity
@@ -118,13 +118,27 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         exclude_checks=excluded,
     )
 
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Scanning...", total=None)
+    if sys.stdout.isatty():
+        # Interactive terminal: show per-category progress (transient so it
+        # doesn't pollute the final output).
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Starting scan...", total=None)
+
+            def on_progress(label: str, index: int, total: int):
+                progress.update(task, description=label, completed=index - 1, total=total)
+
+            result = scanner.scan(progress_callback=on_progress)
+            progress.update(task, completed=progress.tasks[0].total or 0)
+    else:
+        # Not a TTY (piped/CI output): no progress rendering
         result = scanner.scan()
-        progress.update(task, completed=True)
 
     # Print summary table
     table = Table(title="Scan Summary", show_header=True, header_style="bold magenta")

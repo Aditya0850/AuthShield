@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any, ClassVar
 from urllib.parse import urljoin
 
@@ -102,15 +102,28 @@ class Scanner:
              frozenset({"JWT-001", "JWT-003", "JWT-004"})),
         ]
 
-    def scan(self) -> ScanResult:
-        """Execute full scan and return results."""
+    def scan(
+        self,
+        progress_callback: Callable[[str, int, int], None] | None = None,
+    ) -> ScanResult:
+        """Execute full scan and return results.
+
+        Args:
+            progress_callback: Optional callable invoked before each check
+                category runs, with (category_label, category_index, total).
+        """
         self._scan_start_time = time.time()
         print(f"[*] Starting scan on {self.target}")
         if self.excluded_checks:
             print(f"[*] Excluded checks: {', '.join(sorted(self.excluded_checks))}")
 
+        categories = self.get_check_categories()
+        total_categories = len(categories)
+
         try:
-            for label, module, check_ids in self.get_check_categories():
+            for index, (label, module, check_ids) in enumerate(categories, start=1):
+                if progress_callback:
+                    progress_callback(label, index, total_categories)
                 if check_ids and check_ids <= self.excluded_checks:
                     self.log(f"Skipping {label.lower()} (all checks excluded)")
                     continue
