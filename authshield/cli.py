@@ -13,6 +13,7 @@ from authshield.core.models import Severity
 from authshield.core.scanner import Scanner
 from authshield.reporting.html_report import HTMLReporter
 from authshield.reporting.json_report import JSONReporter
+from authshield.reporting.sarif_report import SARIFReporter
 
 # Force UTF-8 encoding on Windows
 if sys.platform == "win32":
@@ -60,7 +61,8 @@ def cli():
 @click.option("-H", "--header", "headers", multiple=True, help="Headers in format 'Name: Value'")
 @click.option("-t", "--timeout", default=10, help="Request timeout in seconds")
 @click.option("--no-ssl-verify", is_flag=True, help="Disable SSL verification")
-@click.option("-f", "--format", "output_format", type=click.Choice(["json", "html", "both"]), default="both")
+@click.option("-f", "--format", "output_format",
+              type=click.Choice(["json", "html", "sarif", "both"]), default="both")
 @click.option("-o", "--output", help="Output file path (without extension)")
 @click.option("--exclude-checks", "exclude_checks",
               help="Comma-separated check IDs to skip (e.g. 'RATE-001,JWT-004')")
@@ -188,6 +190,11 @@ def scan(target: str, endpoints: str, cookies: tuple, headers: tuple,
         html_path = f"{output}.html" if output else "authshield-report.html"
         HTMLReporter.generate(result, html_path)
         console.print(f"[green]OK[/green] HTML report saved to: {html_path}")
+
+    if output_format in ("sarif", "both"):
+        sarif_path = f"{output}.sarif" if output else "authshield-report.sarif"
+        SARIFReporter.generate(result, sarif_path)
+        console.print(f"[green]OK[/green] SARIF report saved to: {sarif_path}")
 
     if total > 0:
         console.print(f"\n[yellow]WARNING[/yellow] Found {total} security issue(s). Review the reports for remediation guidance.")
