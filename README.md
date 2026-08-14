@@ -9,7 +9,7 @@ AuthShield is a **passive-first** security scanner that audits web applications 
 
 ---
 
-## ⚡ Quick Start
+## ��� Quick Start
 
 ```bash
 # Install
@@ -29,7 +29,7 @@ authshield scan http://example.com \
 
 ---
 
-## 🔍 Implemented Security Checks
+## ��� Implemented Security Checks
 
 AuthShield implements **9 conservative checks** across 5 categories. Each check has a documented methodology and request budget.
 
@@ -60,7 +60,7 @@ AuthShield implements **9 conservative checks** across 5 categories. Each check 
 
 ---
 
-## 📊 Output Formats
+## ��� Output Formats
 
 ### JSON Report (`-f json` or `-f both`)
 Machine-readable structured output with findings, evidence, and remediation guidance.
@@ -90,7 +90,7 @@ Human-readable report grouped by severity and category with collapsible evidence
 
 ---
 
-## 🧪 Local Testing with VulnApp
+## ��� Local Testing with VulnApp
 
 AuthShield includes a **deliberately vulnerable Flask application** (`vuln_app.py`) that demonstrates all detectable issues.
 
@@ -109,7 +109,7 @@ authshield scan http://localhost:5000 -f both -o vulnapp-report
 # - 2 HIGH:   CORS-001 (reflects arbitrary origin + credentials), CORS-002 (missing security headers)
 ```
 
-> ⚠️ **WARNING**: `vuln_app.py` contains INTENTIONAL vulnerabilities. Never deploy to production. For local testing only.
+> ������ **WARNING**: `vuln_app.py` contains INTENTIONAL vulnerabilities. Never deploy to production. For local testing only.
 
 ### VulnApp Endpoints
 
@@ -124,7 +124,7 @@ authshield scan http://localhost:5000 -f both -o vulnapp-report
 
 ---
 
-## 🛡 Design Principles
+## ��� Design Principles
 
 ### Conservative by Default
 - **No brute force** — No credential stuffing, password spraying, or secret cracking
@@ -144,7 +144,7 @@ authshield scan http://localhost:5000 -f both -o vulnapp-report
 
 ---
 
-## ⚙️ Configuration
+## ������ Configuration
 
 ### CLI Options
 
@@ -179,7 +179,7 @@ authshield quick http://example.com
 
 ---
 
-## 🏗 Development
+## ��� Development
 
 ### Requirements
 - Python 3.10+
@@ -225,12 +225,12 @@ authshield/
 ├── reporting/
 │   ├── html_report.py     # Jinja2 HTML reporter
 │   └── json_report.py     # JSON reporter
-└── __init__.py
+��── __init__.py
 ```
 
 ---
 
-## 📋 Limitations & Known Gaps
+## ��� Limitations & Known Gaps
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
@@ -242,7 +242,7 @@ authshield/
 
 ---
 
-## 🤝 Contributing
+## ��� Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -259,7 +259,7 @@ authshield/
 
 ---
 
-## 📝 Changelog
+## ��� Changelog
 
 ### v0.1.0 (2026-08-11)
 - Initial release with 9 checks across 5 categories
@@ -270,12 +270,61 @@ authshield/
 
 ---
 
-## 📄 License
+## ��� License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## ⚠️ Disclaimer
+## ������ Roadmap
+
+### v0.1 (current) — Passive Security Auditing
+- Auth, sessions/cookies, CORS, JWT, security headers
+- JSON/HTML reports
+
+### v0.2 — Web Security Expansion
+- SQL injection detection
+- XSS detection (reflected, stored, DOM indicators)
+- CSRF protection analysis
+- SSRF indicators
+- Open redirect detection
+- Path traversal heuristics
+- IDOR/BOLA heuristics
+- File upload weakness detection
+- HTTP method misconfiguration
+- Information disclosure checks
+- Sensitive data exposure indicators
+- API security checks
+
+### v0.3 — Attack Surface Intelligence
+- Endpoint discovery (crawling, JS analysis)
+- robots.txt / sitemap.xml analysis
+- JavaScript endpoint extraction
+- API route discovery
+- Parameter discovery
+- Technology fingerprinting (framework, CMS, WAF)
+- Auth flow mapping
+- Attack surface visualization
+
+### v0.4 — Safe Validation & Remediation Intelligence
+- **Detect → Validate Safely → Collect Evidence → Rate Confidence → Explain Impact**
+- Every finding moves toward:
+  - What happened
+  - Why it matters
+  - Evidence
+  - Severity
+  - Confidence
+  - How to reproduce safely
+  - How to fix
+  - References
+- **Strict rule**: AuthShield only operates against systems the user owns, authorized targets, or intentionally vulnerable labs — no automated exploitation, non-destructive validation only
+
+---
+
+AuthShield: **Web Application Security Auditor — From Passive Audit to Safe Validation**
+
+---
+
+## ������ Disclaimer
 
 AuthShield is a **security auditing tool** for authorized testing only. The authors are not responsible for misuse. Always obtain explicit permission before scanning targets you do not own. The included `vuln_app.py` is for educational purposes only — never deploy to production.
