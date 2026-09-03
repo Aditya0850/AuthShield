@@ -18,6 +18,7 @@ from authshield.core.models import Category, Evidence, Finding, ScanResult, Scan
 from authshield.core.scanner import Scanner
 from authshield.reporting.html_report import HTMLReporter
 from authshield.reporting.json_report import JSONReporter
+from authshield.reporting.sarif_report import SARIFReporter
 
 
 class TestModels:
@@ -237,6 +238,126 @@ class TestJSONReporter:
         data = json.loads(json_str)
         assert "scan_time" in data
         assert "T" in data["scan_time"]
+
+
+class TestSARIFReporter:
+    def _make_result_with_findings(self):
+        result = ScanResult(target="https://example.com")
+        result.add_finding(Finding(
+            id="JWT-004",
+            title="Endpoint Accepts 'none' Algorithm JWT",
+            severity=Severity.CRITICAL,
+            category=Category.JWT,
+            evidence=Evidence(description="Endpoint accepted alg=none token",
+                              raw_data={"endpoint": "/api/user"}),
+            fix="Reject tokens with alg=none",
+            references=["https://owasp.org/jwt"],
+        ))
+        result.add_finding(Finding(
+            id="COOKIE-001",
+            title="Missing Secure Flag on Session Cookie",
+            severity=Severity.HIGH,
+            category=Category.SESSION,
+            evidence=Evidence(description="Session cookie lacks Secure flag"),
+            fix="Set the Secure flag",
+        ))
+        result.add_finding(Finding(
+            id="AUTH-001",
+            title="Weak Password Policy Indicator",
+            severity=Severity.MEDIUM,
+            category=Category.AUTHENTICATION,
+            evidence=Evidence(description="Registration allows 4-char passwords"),
+            fix="Require at least 8 characters",
+        ))
+        return result
+
+    def test_generate_valid_sarif_structure(self):
+        sarif_str = SARIFReporter.generate(self._make_result_with_findings())
+        data = json.loads(sarif_str)
+
+        assert data["version"] == "2.1.0"
+        assert "sarif-2.1.0" in data["$schema"]
+        assert len(data["runs"]) == 1
+        driver = data["runs"][0]["tool"]["driver"]
+        assert driver["name"] == "AuthShield"
+        assert driver["version"] == "0.1.0"
+        assert driver["informationUri"] == "https://github.com/Aditya0850/AuthShield"
+
+    def test_findings_map_to_rules_and_results(self):
+        data = json.loads(SARIFReporter.generate(self._make_result_with_findings()))
+        run = data["runs"][0]
+
+        rule_ids = [r["id"] for r in run["tool"]["driver"]["rules"]]
+        assert rule_ids == ["JWT-004", "COOKIE-001", "AUTH-001"]
+
+        results = run["results"]
+        assert len(results) == 3
+        assert results[0]["ruleId"] == "JWT-004"
+        assert results[0]["ruleIndex"] == 0
+        assert "alg=none" in results[0]["message"]["text"]
+        assert "Fix: Reject tokens with alg=none" in results[0]["message"]["text"]
+
+    def test_severity_level_mapping(self):
+        data = json.loads(SARIFReporter.generate(self._make_result_with_findings()))
+        levels = {r["ruleId"]: r["level"] for r in data["runs"][0]["results"]}
+        assert levels["JWT-004"] == "error"      # CRITICAL
+        assert levels["COOKIE-001"] == "error"   # HIGH
+        assert levels["AUTH-001"] == "warning"   # MEDIUM
+
+    def test_low_and_info_map_to_note(self):
+        result = ScanResult(target="https://example.com")
+        result.add_finding(Finding(
+            id="TEST-LOW", title="Low", severity=Severity.LOW,
+            category=Category.SESSION, evidence=Evidence(description="d"), fix="f",
+        ))
+        result.add_finding(Finding(
+            id="TEST-INFO", title="Info", severity=Severity.INFO,
+            category=Category.SESSION, evidence=Evidence(description="d"), fix="f",
+        ))
+        data = json.loads(SARIFReporter.generate(result))
+        assert all(r["level"] == "note" for r in data["runs"][0]["results"])
+
+    def test_category_in_tags_and_security_severity(self):
+        data = json.loads(SARIFReporter.generate(self._make_result_with_findings()))
+        rules = {r["id"]: r for r in data["runs"][0]["tool"]["driver"]["rules"]}
+        assert "jwt" in rules["JWT-004"]["properties"]["tags"]
+        assert "security" in rules["JWT-004"]["properties"]["tags"]
+        assert rules["JWT-004"]["properties"]["security-severity"] == "9.5"
+        assert rules["COOKIE-001"]["properties"]["security-severity"] == "8.0"
+        assert rules["AUTH-001"]["properties"]["security-severity"] == "5.0"
+
+    def test_duplicate_check_ids_share_one_rule(self):
+        result = ScanResult(target="https://example.com")
+        for endpoint in ("/login", "/api/login"):
+            result.add_finding(Finding(
+                id="RATE-001",
+                title="Missing Rate Limiting on Authentication Endpoint",
+                severity=Severity.HIGH,
+                category=Category.RATE_LIMITING,
+                evidence=Evidence(description=f"No rate limit on {endpoint}"),
+                fix="Add rate limiting",
+            ))
+        data = json.loads(SARIFReporter.generate(result))
+        run = data["runs"][0]
+        assert len(run["tool"]["driver"]["rules"]) == 1
+        assert len(run["results"]) == 2
+        assert all(r["ruleIndex"] == 0 for r in run["results"])
+
+    def test_evidence_raw_data_preserved(self):
+        data = json.loads(SARIFReporter.generate(self._make_result_with_findings()))
+        jwt_result = data["runs"][0]["results"][0]
+        assert jwt_result["properties"]["evidence"] == {"endpoint": "/api/user"}
+        assert jwt_result["properties"]["category"] == "jwt"
+        assert jwt_result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == \
+            "https://example.com"
+
+    def test_generate_sarif_to_file(self, tmp_path):
+        output_path = tmp_path / "report.sarif"
+        SARIFReporter.generate(ScanResult(target="https://example.com"), str(output_path))
+        assert output_path.exists()
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        assert data["version"] == "2.1.0"
+        assert data["runs"][0]["results"] == []
 
 
 class TestHTMLReporter:
