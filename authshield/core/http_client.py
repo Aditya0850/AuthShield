@@ -7,7 +7,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from authshield.core.models import Category, Evidence, Finding, Severity
+from authshield.core.models import (
+    Category,
+    Confidence,
+    Evidence,
+    EvidenceType,
+    Exploitability,
+    Finding,
+    Severity,
+)
 
 
 class HTTPClient:
@@ -142,6 +150,11 @@ def make_finding(
     request: str | None = None,
     response: str | None = None,
     cvss_score: float | None = None,
+    cvss_vector: str | None = None,
+    confidence: Confidence = Confidence.LOW,
+    evidence_type: EvidenceType = EvidenceType.INDICATOR,
+    exploitability: Exploitability = Exploitability.THEORETICAL,
+    context: dict[str, Any] | None = None,
 ) -> Finding:
     """Factory for creating Finding objects with consistent structure."""
     return Finding(
@@ -158,4 +171,9 @@ def make_finding(
         fix=fix,
         references=references or [],
         cvss_score=cvss_score,
+        cvss_vector=cvss_vector,
+        confidence=confidence,
+        evidence_type=evidence_type,
+        exploitability=exploitability,
+        context=context or {},
     )

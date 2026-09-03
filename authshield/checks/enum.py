@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
 from authshield.core.http_client import make_finding
-from authshield.core.models import Category, Severity
+from authshield.core.models import Category, Confidence, EvidenceType, Exploitability, Severity
 
 
 class EnumChecks:
@@ -99,6 +99,10 @@ class EnumChecks:
                     ),
                     references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
                     raw_data={"signatures": signatures, "methodology": "status + error content comparison"},
+                    confidence=Confidence.MEDIUM,
+                    evidence_type=EvidenceType.BEHAVIORAL,
+                    exploitability=Exploitability.LIKELY,
+                    context={"check_type": "error_signature_comparison"},
                 ))
                 return
 
@@ -127,6 +131,10 @@ class EnumChecks:
                     ),
                     references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
                     raw_data={"reflected_username": user, "methodology": "username reflection in error message"},
+                    confidence=Confidence.HIGH,
+                    evidence_type=EvidenceType.PROOF,
+                    exploitability=Exploitability.PROVEN,
+                    context={"check_type": "username_reflection_detection"},
                 ))
                 return
 
