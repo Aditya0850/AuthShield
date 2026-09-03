@@ -34,6 +34,11 @@ class JSONReporter:
                     "fix": f.fix,
                     "references": f.references,
                     "cvss_score": f.cvss_score,
+                    "cvss_vector": f.cvss_vector,
+                    "confidence": f.confidence.value,
+                    "evidence_type": f.evidence_type.value,
+                    "exploitability": f.exploitability.value,
+                    "context": f.context,
                 }
                 for f in result.findings
             ],

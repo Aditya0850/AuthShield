@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from authshield.core.scanner import Scanner
 
 from authshield.core.http_client import make_finding
-from authshield.core.models import Category, Severity
+from authshield.core.models import Category, Confidence, EvidenceType, Exploitability, Severity
 
 
 class AuthChecks:
@@ -57,7 +57,7 @@ class AuthChecks:
                     self.scanner.add_finding(make_finding(
                         check_id="AUTH-001",
                         title="Weak Password Policy Indicator",
-                        severity=Severity.MEDIUM,  # Downgraded: indicator only, not proof
+                        severity=Severity.MEDIUM,
                         category=Category.AUTHENTICATION,
                         evidence_desc=f"Registration page {endpoint} contains weak password requirement: {description}",
                         fix="Enforce minimum 12-character passwords with complexity requirements. "
@@ -65,5 +65,9 @@ class AuthChecks:
                         references=["https://owasp.org/www-project-authentication-cheat-sheet/"],
                         raw_data={"endpoint": endpoint, "pattern": pattern, "description": description},
                         response=content[:500],
+                        confidence=Confidence.LOW,
+                        evidence_type=EvidenceType.INDICATOR,
+                        exploitability=Exploitability.THEORETICAL,
+                        context={"check_type": "passive_content_analysis"},
                     ))
                     return  # Only report once per scan

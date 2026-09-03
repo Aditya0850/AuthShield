@@ -89,6 +89,8 @@
         .finding-fix { background: #f0fdf4; border-left: 3px solid #22c55e; padding: 1rem; border-radius: 0 8px 8px 0; }
         .finding-fix-title { font-weight: 600; color: #166534; margin-bottom: 0.5rem; }
         .finding-fix-text { color: #166534; }
+        .finding-meta { margin: 1rem 0; padding: 0.75rem; background: #f1f5f9; border-radius: 8px; font-size: 0.875rem; }
+        .finding-context { margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 8px; font-size: 0.875rem; font-family: monospace; }
         .finding-refs { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
         .finding-ref { color: #2563eb; text-decoration: none; font-size: 0.875rem; }
         .finding-ref:hover { text-decoration: underline; }
@@ -109,7 +111,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🛡️ AuthShield Security Audit Report</h1>
+            <h1>������� AuthShield Security Audit Report</h1>
             <div class="meta">
                 <div class="meta-item"><strong>Target:</strong> {{ result.target }}</div>
                 <div class="meta-item"><strong>Scan Time:</strong> {{ result.scan_time.strftime('%Y-%m-%d %H:%M UTC') }}</div>
@@ -158,10 +160,20 @@
                 </div>
                 <div class="finding-evidence">{{ finding.evidence.description }}
                     {% if finding.evidence.raw_data %}{{ finding.evidence.raw_data | tojson(indent=2) }}{% endif %}</div>
+                <div class="finding-meta">
+                    <div><strong>Confidence:</strong> <span class="badge {{ finding.confidence.value.lower() }}">{{ finding.confidence.value.upper() }}</span></div>
+                    <div><strong>Evidence Type:</strong> <span class="badge">{{ finding.evidence_type.value.replace('_', ' ').title() }}</span></div>
+                    <div><strong>Exploitability:</strong> <span class="badge">{{ finding.exploitability.value.replace('_', ' ').title() }}</span></div>
+                </div>
                 <div class="finding-fix">
-                    <div class="finding-fix-title">🔧 Remediation</div>
+                    <div class="finding-fix-title">���� Remediation</div>
                     <div class="finding-fix-text">{{ finding.fix }}</div>
                 </div>
+                {% if finding.context %}
+                <div class="finding-context">
+                    <strong>Context:</strong> {{ finding.context | tojson(indent=2) }}
+                </div>
+                {% endif %}
                 {% if finding.references %}
                 <div class="finding-refs">
                     <strong>References:</strong>
